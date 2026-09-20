@@ -95,7 +95,7 @@ public class MainActivity extends Activity {
 
     void launchBrowser() {
         try { desktop.showWindow("Browser"); startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))); }
-        catch (Exception e) { showWindow("Browser"); }
+        catch (Exception e) { desktop.showWindow("Browser"); }
     }
 
     void launchTerminal() { desktop.showWindow("Terminal"); startTerminalShell(); }
