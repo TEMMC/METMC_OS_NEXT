@@ -28,7 +28,8 @@ public class Updater {
                 if(c.getResponseCode()!=200) throw new IOException("No published release yet");
                 JSONObject o=new JSONObject(read(c.getInputStream()));
                 int remoteCode=parseVersionCode(o.optString("tag_name"));
-                int localCode=parseVersionCode(BuildConfig.VERSION_NAME);
+                String localVersion=a.getPackageManager().getPackageInfo(a.getPackageName(),0).versionName;
+                int localCode=parseVersionCode(localVersion);
                 if(remoteCode<=localCode){
                     if(!automatic) a.runOnUiThread(()->msg("METMC OS NEXT","You are already running the latest version."));
                     return;
@@ -121,7 +122,7 @@ public class Updater {
                 while((n=in.read(b))!=-1) out.write(b,0,n);
                 session.fsync(out);
             }
-            Intent result=new Intent(a,"com.metmc.os.next.UpdateInstallReceiver");
+            Intent result=new Intent(a,UpdateInstallReceiver.class);
             result.putExtra("metmc_apk_path",f.getAbsolutePath());
             int flags=PendingIntent.FLAG_UPDATE_CURRENT;
             if(Build.VERSION.SDK_INT>=23) flags|=PendingIntent.FLAG_IMMUTABLE;
