@@ -21,6 +21,8 @@ public class MainActivity extends Activity {
     TextView terminalOutput;
     BufferedWriter terminalStdin;
     java.lang.Process terminalShell;
+    LinearLayout terminalToolbar;
+    static final int PICK_WALLPAPER = 9001;
     static final String ROOTFS = "/data/local/linux/rootfs";
     android.content.SharedPreferences prefs;
 
@@ -36,6 +38,11 @@ public class MainActivity extends Activity {
         root.addView(desktop, new FrameLayout.LayoutParams(-1,-1));
         setContentView(root);
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",data.getData().toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ desktop.customWallpaper=BitmapFactory.decodeStream(getContentResolver().openInputStream(data.getData())); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } }
     }
 
     @Override protected void onResume() {
@@ -141,6 +148,7 @@ public class MainActivity extends Activity {
         if (terminalStdin == null || terminalInput == null) return;
         String cmd = terminalInput.getText().toString();
         if (cmd.trim().isEmpty()) return;
+        appendTerminal("root@debian:~$ " + cmd + "\\n");
         try { terminalStdin.write(cmd); terminalStdin.newLine(); terminalStdin.flush(); terminalInput.setText(""); }
         catch (Exception e) { appendTerminal("\n[Command failed] " + e + "\n"); }
     }
@@ -180,6 +188,17 @@ public class MainActivity extends Activity {
         ip.leftMargin=32; ip.rightMargin=100; ip.gravity=Gravity.BOTTOM; ip.bottomMargin=98;
         root.addView(terminalInput,ip);
 
+        terminalToolbar = new LinearLayout(this);
+        terminalToolbar.setOrientation(LinearLayout.HORIZONTAL);
+        terminalToolbar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        terminalToolbar.setPadding(6,2,6,2);
+        terminalToolbar.setBackgroundColor(0xff111922);
+        Button copy = new Button(this); copy.setText("COPY"); copy.setOnClickListener(v -> { if (terminalOutput != null) ((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("METMC Terminal", terminalOutput.getText())); });
+        Button paste = new Button(this); paste.setText("PASTE"); paste.setOnClickListener(v -> { android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); if(cm.hasPrimaryClip() && terminalInput!=null) terminalInput.append(cm.getPrimaryClip().getItemAt(0).coerceToText(this)); });
+        Button clear = new Button(this); clear.setText("CLEAR"); clear.setOnClickListener(v -> { if(terminalOutput!=null) terminalOutput.setText(""); });
+        terminalToolbar.addView(copy,new LinearLayout.LayoutParams(82,48)); terminalToolbar.addView(paste,new LinearLayout.LayoutParams(82,48)); terminalToolbar.addView(clear,new LinearLayout.LayoutParams(82,48));
+        FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(252,52); tp.gravity=Gravity.TOP|Gravity.RIGHT; tp.rightMargin=32; tp.topMargin=155; root.addView(terminalToolbar,tp);
+
         Button run = new Button(this);
         run.setText("RUN"); run.setTextColor(Color.WHITE); run.setAllCaps(false);
         run.setOnClickListener(v -> sendTerminalCommand());
@@ -190,6 +209,7 @@ public class MainActivity extends Activity {
     }
 
     void removeTerminalOverlay() {
+        if (terminalToolbar != null) { ViewParent p=terminalToolbar.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalToolbar); terminalToolbar=null; }
         if (terminalInput != null) {
             ViewParent p=terminalInput.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalInput);
             terminalInput=null;
@@ -248,9 +268,12 @@ public class MainActivity extends Activity {
             if(activeWindow!=null && surface==Surface.DESKTOP) drawWindow(c,w,h,activeWindow);
         }
 
+        Bitmap customWallpaper;
         int wallpaper(){return prefs.getInt("wallpaper",0);}
+        void pickWallpaper(){ try { Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("image/*"); MainActivity.this.startActivityForResult(i,PICK_WALLPAPER); } catch(Exception e) { Toast.makeText(MainActivity.this,"No media picker available",Toast.LENGTH_SHORT).show(); } }
         void drawWallpaper(Canvas c,int w,int h){
             int style=wallpaper();
+            if(style==4 && customWallpaper!=null){ p.setShader(null); c.drawBitmap(customWallpaper,null,new Rect(0,0,w,h),p); return; }
             if(style==0){
                 LinearGradient g=new LinearGradient(0,0,w,h,0xff132238,0xff05080d,Shader.TileMode.CLAMP);
                 p.setShader(g);c.drawRect(0,0,w,h,p);p.setShader(null);
@@ -269,12 +292,14 @@ public class MainActivity extends Activity {
                 stroke(c,0x4439ff88,1);c.drawCircle(w*.75f,h*.42f,150,p);c.drawCircle(w*.75f,h*.42f,105,p);
                 bold(c,"NEXUS",w*.68f,h*.43f,34,0xff39ff88);
                 text(c,"METMC OS NEXT",w*.68f,h*.48f,13,0xff8ab7a0);
-            } else {
+            } else if(style==3) {
                 LinearGradient g=new LinearGradient(0,0,w,h,0xff061016,0xff170a20,Shader.TileMode.CLAMP);
                 p.setShader(g);c.drawRect(0,0,w,h,p);p.setShader(null);
                 stroke(c,0x4439ff88,1);
                 for(int i=0;i<10;i++)c.drawCircle(w*.18f+i*85,h*.35f,35+i*5,p);
                 bold(c,"NIGHT//OPS",34,h-125,27,0xff39ff88);
+            } else {
+                fill(c,0xff05080d); c.drawRect(0,0,w,h,p); bold(c,"MEDIA WALLPAPER",34,h-125,22,0xff39ff88); text(c,"Choose an image from your device",34,h-98,12,0xff9aa7b8);
             }
         }
 
@@ -320,13 +345,17 @@ public class MainActivity extends Activity {
                 if(t>h-82||t+86<130)continue;
                 round(c,l,t,l+cw,t+86,18,0xff171f2a);
                 if(i<n.length){drawAppIcon(c,l+28,t+18,n[i]);bold(c,n[i],l+62,t+33,14,Color.WHITE);text(c,appSubtitle(n[i]),l+62,t+55,11,0xff8d9aab);}
-                else {ResolveInfo r=androidApps.get(i-n.length);String s=String.valueOf(r.loadLabel(getPackageManager()));drawAppIcon(c,l+28,t+18,"Android");bold(c,s,l+62,t+33,14,Color.WHITE);text(c,r.activityInfo.packageName,l+62,t+55,9,0xff718093);}
+                else {ResolveInfo r=androidApps.get(i-n.length);String s=String.valueOf(r.loadLabel(getPackageManager()));drawAndroidIcon(c,l+28,t+18,r);bold(c,s,l+62,t+33,14,Color.WHITE);text(c,r.activityInfo.packageName,l+62,t+55,9,0xff718093);}
             }
             c.restore();
             round(c,28,h-76,w-28,h-34,14,0xff151d27);text(c,"⌕",47,h-48,20,0xffaeb9c8);text(c,"Installed Android + METMC applications",77,h-50,13,0xff98a5b6);
         }
 
         String appSubtitle(String s){if(s.equals("Files"))return"File manager";if(s.equals("Terminal"))return"Native Debian terminal";if(s.equals("Browser"))return"Web browser";if(s.equals("Settings"))return"System controls";if(s.equals("Media"))return"Media player";return"Linux integration";}
+
+        void drawAndroidIcon(Canvas c,float x,float y,ResolveInfo r){
+            Drawable d=r.loadIcon(getPackageManager()); if(d!=null){d.setBounds((int)x,(int)y,(int)x+34,(int)y+34); d.draw(c);} else drawAppIcon(c,x,y,"Android");
+        }
 
         void drawAppIcon(Canvas c,float x,float y,String s){
             round(c,x,y,x+34,y+34,10,0xff26364b);stroke(c,0xffdce6f3,1.8f);
@@ -350,8 +379,8 @@ public class MainActivity extends Activity {
 
         void drawWallpaperManager(Canvas c,int w,int h){
             overlay(c,w,h);bold(c,"Wallpaper Manager",30,91,26,Color.WHITE);text(c,"Built-in METMC hacker wallpapers",30,116,12,0xff8f9bad);
-            String[] names={"Midnight Grid","Cyber Nexus","Night Ops","Deep Blue"};
-            for(int i=0;i<4;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;round(c,l,t,l+w/2f-32,t+130,18,0xff10171e);drawWallpaperPreview(c,l+8,t+8,w/2f-48,114,i);bold(c,names[i],l+20,t+102,13,Color.WHITE);text(c,wallpaper()==i?"ACTIVE":"APPLY",l+w/2f-105,t+102,11,wallpaper()==i?0xff39ff88:0xff9eacbe);}
+            String[] names={"Midnight Grid","Cyber Nexus","Night Ops","Deep Blue","Media Picker"};
+            for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;round(c,l,t,l+w/2f-32,t+130,18,0xff10171e);drawWallpaperPreview(c,l+8,t+8,w/2f-48,114,i);bold(c,names[i],l+20,t+102,13,Color.WHITE);text(c,wallpaper()==i?"ACTIVE":"APPLY",l+w/2f-105,t+102,11,wallpaper()==i?0xff39ff88:0xff9eacbe);
             text(c,"Tap a wallpaper to apply it instantly.",30,h-105,12,0xff9aa7b8);
         }
 
@@ -376,7 +405,7 @@ public class MainActivity extends Activity {
             if(e.getAction()!=MotionEvent.ACTION_UP)return true;
 
             if(surface==Surface.WALLPAPER){
-                for(int i=0;i<4;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;if(x>=l&&x<=l+w/2f-32&&y>=t&&y<=t+130){prefs.edit().putInt("wallpaper",i).apply();surface=Surface.DESKTOP;invalidate();return true;}}
+                for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;if(x>=l&&x<=l+w/2f-32&&y>=t&&y<=t+130){if(i==4){pickWallpaper();}else{prefs.edit().putInt("wallpaper",i).apply();surface=Surface.DESKTOP;invalidate();}return true;}}
                 return true;
             }
             if(y<55&&x<180){surface=surface==Surface.OVERVIEW?Surface.DESKTOP:Surface.OVERVIEW;invalidate();return true;}
