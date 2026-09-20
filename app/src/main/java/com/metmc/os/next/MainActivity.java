@@ -1,7 +1,9 @@
 package com.metmc.os.next;
 
 import android.app.*;
+import android.app.role.RoleManager;
 import android.content.*;
+import android.content.pm.ResolveInfo;
 import android.graphics.*;
 import android.graphics.drawable.*;
 import android.net.Uri;
@@ -24,7 +26,56 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         desktop = new DesktopView(this);
         setContentView(desktop);
+        requestHomeRole();
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (desktop != null) {
+            desktop.refreshAndroidApps();
+            desktop.invalidate();
+        }
+    }
+
+    void requestHomeRole() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        try {
+            RoleManager rm = getSystemService(RoleManager.class);
+            if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME) && !rm.isRoleHeld(RoleManager.ROLE_HOME)) {
+                startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), 4101);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    ArrayList<ResolveInfo> getAndroidApps() {
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.addCategory(Intent.CATEGORY_LAUNCHER);
+        ArrayList<ResolveInfo> list = new ArrayList<>(getPackageManager().queryIntentActivities(i, 0));
+        Collections.sort(list, (a,b) -> {
+            String an = a.loadLabel(getPackageManager()).toString();
+            String bn = b.loadLabel(getPackageManager()).toString();
+            return an.compareToIgnoreCase(bn);
+        });
+        for (int n=list.size()-1; n>=0; n--) {
+            if (getPackageName().equals(list.get(n).activityInfo.packageName)) list.remove(n);
+        }
+        return list;
+    }
+
+    void launchAndroidApp(ResolveInfo info) {
+        try {
+            Intent i = new Intent(Intent.ACTION_MAIN);
+            i.addCategory(Intent.CATEGORY_LAUNCHER);
+            i.setComponent(new ComponentName(info.activityInfo.packageName, info.activityInfo.name));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Android App")
+                    .setMessage("Unable to open " + info.loadLabel(getPackageManager()))
+                    .setPositiveButton("OK", null).show();
+        }
     }
 
     @Override public void onBackPressed() {
@@ -65,11 +116,24 @@ public class MainActivity extends Activity {
         boolean wifi=true, bluetooth=false, sound=true, rotation=false, dark=true;
         boolean dragging=false, resizing=false, maximized=false;
         float winX=42, winY=92, winW=0, winH=0, lastX, lastY;
+        final ArrayList<ResolveInfo> androidApps = new ArrayList<>();
+        float appsScroll=0f;
+        float appsContentHeight=0f;
 
         DesktopView(Context c) {
             super(c);
             p.setTypeface(Typeface.create("sans", Typeface.NORMAL));
             setFocusable(true);
+            refreshAndroidApps();
+        }
+
+        void refreshAndroidApps() {
+            androidApps.clear();
+            androidApps.addAll(getAndroidApps());
+            float rows=(float)Math.ceil((6 + androidApps.size()) / 3.0);
+            appsContentHeight=rows*102f;
+            float max=Math.max(0, appsContentHeight - (getHeight()-270));
+            if (appsScroll > max) appsScroll=max;
         }
 
         void fill(Canvas c, int color) { p.setStyle(Paint.Style.FILL); p.setColor(color); p.setShader(null); }
@@ -186,20 +250,38 @@ public class MainActivity extends Activity {
         void drawApps(Canvas c,int w,int h) {
             overlay(c,w,h);
             bold(c,"Applications",28,92,25,Color.WHITE);
-            text(c,"Your workspace",28,116,13,0xff9daabd);
+            text(c,"METMC apps and installed Android apps",28,116,13,0xff9daabd);
+
             String[] names={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
+            int total=names.length+androidApps.size();
             int cols=3; float cardW=(w-84)/3f;
-            for(int i=0;i<names.length;i++) {
-                int col=i%cols,row=i/cols; float l=28+col*(cardW+14), t=138+row*102;
+            float top=138-appsScroll;
+            c.save();
+            c.clipRect(20,130,w-20,h-88);
+            for(int i=0;i<total;i++) {
+                int col=i%cols,row=i/cols;
+                float l=28+col*(cardW+14), t=top+row*102;
+                if(t>h-82 || t+86<130) continue;
                 round(c,l,t,l+cardW,t+86,18,0xff171f2a);
-                drawAppIcon(c,l+28,t+18,names[i]);
-                bold(c,names[i],l+62,t+33,14,Color.WHITE);
-                text(c,appSubtitle(names[i]),l+62,t+55,11,0xff8d9aab);
+                if(i<names.length) {
+                    String name=names[i];
+                    drawAppIcon(c,l+28,t+18,name);
+                    bold(c,name,l+62,t+33,14,Color.WHITE);
+                    text(c,appSubtitle(name),l+62,t+55,11,0xff8d9aab);
+                } else {
+                    ResolveInfo info=androidApps.get(i-names.length);
+                    String label=info.loadLabel(getPackageManager()).toString();
+                    drawAppIcon(c,l+28,t+18,"Android");
+                    bold(c,label,l+62,t+33,14,Color.WHITE);
+                    text(c,"Android app",l+62,t+55,11,0xff8d9aab);
+                }
             }
-            round(c,28,h-135,w-28,h-87,16,0xff151d27);
-            stroke(c,0x334d5d70,1); c.drawRoundRect(28,h-135,w-28,h-87,16,16,p);
-            text(c,"⌕",47,h-104,23,0xffaeb9c8);
-            text(c,"Search applications",77,h-106,14,0xff98a5b6);
+            c.restore();
+
+            round(c,28,h-76,w-28,h-34,14,0xff151d27);
+            stroke(c,0x334d5d70,1); c.drawRoundRect(28,h-76,w-28,h-34,14,14,p);
+            text(c,"⌕",47,h-48,20,0xffaeb9c8);
+            text(c,"Installed apps",77,h-50,13,0xff98a5b6);
         }
 
         String appSubtitle(String s) {
@@ -326,18 +408,31 @@ public class MainActivity extends Activity {
             }
 
             if(surface==Surface.APPS) {
+                if (Math.abs(y-downY) > 24) {
+                    appsScroll += downY-y;
+                    float max=Math.max(0,appsContentHeight-(h-270));
+                    if(appsScroll<0) appsScroll=0;
+                    if(appsScroll>max) appsScroll=max;
+                    invalidate(); return true;
+                }
                 String[] names={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
                 float cardW=(w-84)/3f;
-                for(int i=0;i<names.length;i++) {
-                    int col=i%3,row=i/3; float l=28+col*(cardW+14),t=138+row*102;
+                float top=138-appsScroll;
+                int total=names.length+androidApps.size();
+                for(int i=0;i<total;i++) {
+                    int col=i%3,row=i/3; float l=28+col*(cardW+14),t=top+row*102;
                     if(x>=l&&x<=l+cardW&&y>=t&&y<=t+86) {
-                        String a=names[i];
-                        if(a.equals("Files")) showWindow("Files");
-                        else if(a.equals("Terminal")) launchTerminal();
-                        else if(a.equals("Browser")) launchBrowser();
-                        else if(a.equals("Settings")) surface=Surface.SETTINGS;
-                        else if(a.equals("Linux Apps")) showWindow("Linux Apps");
-                        else showWindow("Media");
+                        if(i<names.length) {
+                            String a=names[i];
+                            if(a.equals("Files")) showWindow("Files");
+                            else if(a.equals("Terminal")) launchTerminal();
+                            else if(a.equals("Browser")) launchBrowser();
+                            else if(a.equals("Settings")) surface=Surface.SETTINGS;
+                            else if(a.equals("Linux Apps")) showWindow("Linux Apps");
+                            else showWindow("Media");
+                        } else {
+                            launchAndroidApp(androidApps.get(i-names.length));
+                        }
                         invalidate(); return true;
                     }
                 }
