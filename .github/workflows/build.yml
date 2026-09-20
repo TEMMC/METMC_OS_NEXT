@@ -26,31 +26,27 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Build debug APK
+      - name: Build APK
         run: gradle assembleDebug --no-daemon
 
-      - name: Build release APK
-        run: gradle assembleRelease --no-daemon
-
-      - name: Collect APKs
+      - name: Prepare release APK
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/METMC-OS-NEXT-debug.apk
-          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp app/build/outputs/apk/release/app-release-unsigned.apk release/METMC-OS-NEXT-unsigned.apk
-          fi
+          cp app/build/outputs/apk/debug/app-debug.apk release/METMC-OS-NEXT.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: METMC-OS-NEXT
-          path: release/*.apk
+          path: release/METMC-OS-NEXT.apk
           retention-days: 90
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="nightly"
+          TAG="v1.0.0"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" release/*.apk             --title "METMC OS NEXT Nightly"             --notes "Automated METMC OS NEXT build from $GITHUB_SHA."             --prerelease
+          gh release create "$TAG" release/METMC-OS-NEXT.apk \
+            --title "METMC OS NEXT v1.0.0" \
+            --notes "METMC OS NEXT native Android desktop build from $GITHUB_SHA."
