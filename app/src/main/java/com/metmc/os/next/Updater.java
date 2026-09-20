@@ -3,7 +3,7 @@ package com.metmc.os.next;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
+import android.os.Build;\nimport android.app.PendingIntent;\nimport android.content.pm.PackageInstaller;
 import android.provider.Settings;
 import androidx.core.content.FileProvider;
 import java.io.*;
@@ -106,18 +106,29 @@ public class Updater {
 
     void installWithPackageInstaller(File f){
         try{
-            Uri uri=FileProvider.getUriForFile(a,"com.metmc.os.next.fileprovider",f);
-            Intent i=new Intent(Intent.ACTION_VIEW,uri);
-            i.setDataAndType(uri,"application/vnd.android.package-archive");
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
-            a.runOnUiThread(()->{
-                try{a.startActivity(i);}catch(Exception e){
-                    msg("Install update","Allow METMC OS NEXT to install unknown apps, then retry.");
-                }
-            });
-            // Non-root Android package installation requires user confirmation, so cleanup
-            // is performed by the PackageInstaller result receiver in a future signed build.
-        }catch(Exception e){msg("Install update",e.toString());}
+            if(Build.VERSION.SDK_INT < 21) throw new IOException("Android PackageInstaller is unavailable.");
+            PackageInstaller installer=a.getPackageManager().getPackageInstaller();
+            PackageInstaller.SessionParams params=new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+            params.setAppPackageName(a.getPackageName());
+            int sessionId=installer.createSession(params);
+            PackageInstaller.Session session=installer.openSession(sessionId);
+            try(InputStream in=new FileInputStream(f);
+                OutputStream out=session.openWrite("METMC-OS-NEXT.apk",0,f.length())){
+                byte[] b=new byte[32768]; int n;
+                while((n=in.read(b))!=-1) out.write(b,0,n);
+                session.fsync(out);
+            }
+            Intent result=new Intent(a,"com.metmc.os.next.UpdateInstallReceiver");
+            result.putExtra("metmc_apk_path",f.getAbsolutePath());
+            int flags=PendingIntent.FLAG_UPDATE_CURRENT;
+            if(Build.VERSION.SDK_INT>=23) flags|=PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pi=PendingIntent.getBroadcast(a,sessionId,result,flags);
+            session.commit(pi.getIntentSender());
+            session.close();
+        }catch(Exception e){
+            try{f.delete();}catch(Exception ignored){}
+            a.runOnUiThread(()->msg("Install update","Android requires permission to install METMC OS NEXT updates. Enable 'Install unknown apps' for METMC OS NEXT and retry."));
+        }
     }
 
     void restart(){
