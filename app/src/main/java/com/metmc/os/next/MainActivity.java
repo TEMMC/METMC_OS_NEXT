@@ -1,7 +1,6 @@
 package com.metmc.os.next;
 
 import android.app.*;
-import android.app.role.RoleManager;
 import android.content.*;
 import android.content.pm.ResolveInfo;
 import android.graphics.*;
@@ -26,7 +25,6 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         desktop = new DesktopView(this);
         setContentView(desktop);
-        requestHomeRole();
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
     }
 
@@ -36,16 +34,6 @@ public class MainActivity extends Activity {
             desktop.refreshAndroidApps();
             desktop.invalidate();
         }
-    }
-
-    void requestHomeRole() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
-        try {
-            RoleManager rm = getSystemService(RoleManager.class);
-            if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME) && !rm.isRoleHeld(RoleManager.ROLE_HOME)) {
-                startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_HOME), 4101);
-            }
-        } catch (Exception ignored) {}
     }
 
     ArrayList<ResolveInfo> getAndroidApps() {
