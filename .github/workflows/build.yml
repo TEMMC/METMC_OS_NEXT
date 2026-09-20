@@ -26,18 +26,37 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Build APK
-        run: gradle assembleDebug --no-daemon
+      - name: Restore permanent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.METMC_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "METMC_KEYSTORE_BASE64 secret is missing"; exit 1; }
+          echo "$KEYSTORE_B64" | base64 --decode > metmc-release.jks
 
-      - name: Prepare release APK
+      - name: Build signed release APK
+        env:
+          METMC_KEYSTORE_PASSWORD: ${{ secrets.METMC_KEYSTORE_PASSWORD }}
+          METMC_KEY_ALIAS: ${{ secrets.METMC_KEY_ALIAS }}
+          METMC_KEY_PASSWORD: ${{ secrets.METMC_KEY_PASSWORD }}
+        run: |
+          test -n "$METMC_KEYSTORE_PASSWORD"
+          test -n "$METMC_KEY_ALIAS"
+          test -n "$METMC_KEY_PASSWORD"
+          gradle assembleRelease --no-daemon
+
+      - name: Prepare release
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/debug/app-debug.apk release/METMC-OS-NEXT.apk
+          cp app/build/outputs/apk/release/app-release.apk release/METMC-OS-NEXT.apk
+
+      - name: Verify APK signature
+        run: |
+          $ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --verbose release/METMC-OS-NEXT.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: METMC-OS-NEXT
+          name: METMC-OS-NEXT-v1.0.1
           path: release/METMC-OS-NEXT.apk
           retention-days: 90
 
@@ -45,8 +64,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v1.0.0"
+          TAG="v1.0.1"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" release/METMC-OS-NEXT.apk \
-            --title "METMC OS NEXT v1.0.0" \
-            --notes "METMC OS NEXT native Android desktop build from $GITHUB_SHA."
+          gh release create "$TAG" release/METMC-OS-NEXT.apk             --title "METMC OS NEXT v1.0.1"             --notes "Signed METMC OS NEXT release. Future updates use the same permanent signing key."
