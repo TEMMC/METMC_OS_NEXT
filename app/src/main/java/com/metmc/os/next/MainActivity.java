@@ -94,7 +94,7 @@ public class MainActivity extends Activity {
     }
 
     void launchBrowser() {
-        try { showWindow("Browser"); startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))); }
+        try { desktop.showWindow("Browser"); startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))); }
         catch (Exception e) { showWindow("Browser"); }
     }
 
