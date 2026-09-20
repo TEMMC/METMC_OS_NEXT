@@ -22,7 +22,8 @@ public class MainActivity extends Activity {
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
                 View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
         desktop = new DesktopView(this);
-        setContentView(desktop);\n        new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
+        setContentView(desktop);
+        new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
     }
 
     @Override public void onBackPressed() {
@@ -59,7 +60,9 @@ public class MainActivity extends Activity {
         final String[] dockApps = {"Files","Terminal","Browser","Settings"};
         long downTime;
         float downX, downY;
-        int accent = Color.rgb(95,145,255);\n        boolean wifi=true, bluetooth=false, sound=true, rotation=false, dark=true;\n        boolean dragging=false, resizing=false, maximized=false;\n        float winX=42, winY=92, winW=0, winH=0, lastX, lastY;
+        int accent = Color.rgb(95,145,255);
+        boolean wifi=true, bluetooth=false, sound=true, rotation=false, dark=true;
+        boolean dragging=false, resizing=false, maximized=false;\n        float winX=42, winY=92, winW=0, winH=0, lastX, lastY;
 
         DesktopView(Context c) {
             super(c);
