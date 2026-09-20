@@ -25,7 +25,7 @@ public class Updater {
                 if(c.getResponseCode()!=200) throw new IOException("No published release yet");
                 JSONObject o=new JSONObject(read(c.getInputStream()));
                 int remoteCode=parseVersionCode(o.optString("tag_name"));
-                int localCode=BuildConfig.VERSION_CODE;
+                int localCode=parseVersionCode(BuildConfig.VERSION_NAME);
                 if(remoteCode<=localCode){
                     if(!automatic) a.runOnUiThread(()->msg("METMC OS NEXT","You are already running the latest version."));
                     return;
