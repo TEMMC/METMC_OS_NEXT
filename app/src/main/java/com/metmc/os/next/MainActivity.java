@@ -63,7 +63,8 @@ public class MainActivity extends Activity {
         float downX, downY;
         int accent = Color.rgb(95,145,255);
         boolean wifi=true, bluetooth=false, sound=true, rotation=false, dark=true;
-        boolean dragging=false, resizing=false, maximized=false;\n        float winX=42, winY=92, winW=0, winH=0, lastX, lastY;
+        boolean dragging=false, resizing=false, maximized=false;
+        float winX=42, winY=92, winW=0, winH=0, lastX, lastY;
 
         DesktopView(Context c) {
             super(c);
