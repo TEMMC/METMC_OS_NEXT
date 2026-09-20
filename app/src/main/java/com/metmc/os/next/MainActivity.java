@@ -7,6 +7,7 @@ import android.graphics.drawable.*;
 import android.net.Uri;
 import android.os.*;
 import android.view.*;
+import android.widget.EditText;
 import java.text.*;
 import java.util.*;
 
