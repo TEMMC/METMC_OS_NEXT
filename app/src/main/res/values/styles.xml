@@ -1,0 +1,1 @@
+<resources><style name="Theme.METMC" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:windowLightStatusBar">false</item><item name="android:statusBarColor">@color/metmc_black</item><item name="android:navigationBarColor">@color/metmc_black</item></style></resources>
