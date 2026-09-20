@@ -20,7 +20,7 @@ public class MainActivity extends Activity {
     EditText terminalInput;
     TextView terminalOutput;
     BufferedWriter terminalStdin;
-    Process terminalShell;
+    java.lang.Process terminalShell;
     static final String ROOTFS = "/data/local/linux/rootfs";
     android.content.SharedPreferences prefs;
 
@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
         catch (Exception e) { showWindow("Browser"); }
     }
 
-    void launchTerminal() { showWindow("Terminal"); startTerminalShell(); }
+    void launchTerminal() { desktop.showWindow("Terminal"); startTerminalShell(); }
 
     void startTerminalShell() {
         if (terminalShell != null && terminalShell.isAlive()) return;
