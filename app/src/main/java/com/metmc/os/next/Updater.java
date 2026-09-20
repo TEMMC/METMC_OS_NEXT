@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import androidx.core.content.FileProvider;
 import java.io.*;
 import java.net.*;
@@ -13,18 +14,20 @@ public class Updater {
     final MainActivity a;
     Updater(MainActivity a){this.a=a;}
 
-    void check(){
+    void check(){ check(true); }
+
+    void check(boolean automatic){
         new Thread(()->{
             try{
                 HttpURLConnection c=(HttpURLConnection)new URL("https://api.github.com/repos/TEMMC/METMC_OS_NEXT/releases/latest").openConnection();
                 c.setRequestProperty("Accept","application/vnd.github+json");
-                c.setConnectTimeout(10000); c.setReadTimeout(10000);
+                c.setConnectTimeout(10000); c.setReadTimeout(15000);
                 if(c.getResponseCode()!=200) throw new IOException("No published release yet");
                 JSONObject o=new JSONObject(read(c.getInputStream()));
                 int remoteCode=parseVersionCode(o.optString("tag_name"));
                 int localCode=BuildConfig.VERSION_CODE;
                 if(remoteCode<=localCode){
-                    a.runOnUiThread(()->msg("METMC OS NEXT","You are already running the latest version."));
+                    if(!automatic) a.runOnUiThread(()->msg("METMC OS NEXT","You are already running the latest version."));
                     return;
                 }
                 JSONArray assets=o.optJSONArray("assets");
@@ -37,15 +40,15 @@ public class Updater {
                     }
                 }
                 final String u=url,n=name,tag=o.optString("tag_name");
-                a.runOnUiThread(()->{
-                    if(u==null){msg("Updater","Release "+tag+" has no production APK.");return;}
-                    new AlertDialog.Builder(a).setTitle("METMC OS NEXT Update")
-                        .setMessage("Version "+tag+" is available. Download and install it?")
-                        .setPositiveButton("Update",(d,w)->download(u,n))
-                        .setNegativeButton("Later",null).show();
-                });
+                if(u==null){a.runOnUiThread(()->msg("Updater","Release "+tag+" has no production APK."));return;}
+                if(automatic) download(u,n,true);
+                else a.runOnUiThread(()->new AlertDialog.Builder(a)
+                    .setTitle("METMC OS NEXT Update")
+                    .setMessage("Version "+tag+" is available. Download and install it?")
+                    .setPositiveButton("Update",(d,w)->download(u,n,true))
+                    .setNegativeButton("Later",null).show());
             }catch(Exception e){
-                a.runOnUiThread(()->msg("Updater",e.getMessage()==null?"No update information available.":e.getMessage()));
+                if(!automatic) a.runOnUiThread(()->msg("Updater",e.getMessage()==null?"No update information available.":e.getMessage()));
             }
         }).start();
     }
@@ -61,30 +64,74 @@ public class Updater {
         }catch(Exception e){return 0;}
     }
 
-    void download(String url,String name){
+    void download(String url,String name,boolean automatic){
         new Thread(()->{
+            File f=new File(a.getExternalFilesDir(null),name==null?"metmc-next-update.apk":name);
             try{
-                File f=new File(a.getExternalFilesDir(null),name==null?"metmc-next-update.apk":name);
                 HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
-                c.setConnectTimeout(15000); c.setReadTimeout(60000);
+                c.setConnectTimeout(15000); c.setReadTimeout(120000);
                 if(c.getResponseCode()!=200) throw new IOException("Download failed: HTTP "+c.getResponseCode());
                 try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(f)){
-                    byte[] b=new byte[16384]; int n;
+                    byte[] b=new byte[32768]; int n;
                     while((n=in.read(b))!=-1) out.write(b,0,n);
                 }
-                Uri uri=FileProvider.getUriForFile(a,"com.metmc.os.next.fileprovider",f);
-                Intent i=new Intent(Intent.ACTION_VIEW,uri);
-                i.setDataAndType(uri,"application/vnd.android.package-archive");
-                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
-                a.runOnUiThread(()->{
-                    try{a.startActivity(i);}
-                    catch(Exception e){msg("Install update","Allow METMC OS NEXT to install unknown apps, then retry.");}
-                });
-            }catch(Exception e){a.runOnUiThread(()->msg("Update failed",e.toString()));}
+                if(f.length()<100000) throw new IOException("Downloaded APK is incomplete.");
+                if(automatic && installAsRoot(f)) return;
+                installWithPackageInstaller(f);
+            }catch(Exception e){
+                try{f.delete();}catch(Exception ignored){}
+                a.runOnUiThread(()->msg("Update failed",e.getMessage()==null?e.toString():e.getMessage()));
+            }
         }).start();
     }
 
+    boolean installAsRoot(File f){
+        try{
+            Process p=new ProcessBuilder("su","-c","pm install -r --user 0 "+shellQuote(f.getAbsolutePath())).redirectErrorStream(true).start();
+            String output=read(p.getInputStream());
+            int code=p.waitFor();
+            if(code==0 && output.toLowerCase().contains("success")){
+                try{f.delete();}catch(Exception ignored){}
+                a.runOnUiThread(()->{
+                    new AlertDialog.Builder(a).setTitle("METMC OS NEXT Updated")
+                        .setMessage("The update was installed successfully. METMC OS NEXT will restart.")
+                        .setPositiveButton("Restart",(d,w)->restart())
+                        .setOnDismissListener(d->restart()).show();
+                });
+                return true;
+            }
+        }catch(Exception ignored){}
+        return false;
+    }
+
+    void installWithPackageInstaller(File f){
+        try{
+            Uri uri=FileProvider.getUriForFile(a,"com.metmc.os.next.fileprovider",f);
+            Intent i=new Intent(Intent.ACTION_VIEW,uri);
+            i.setDataAndType(uri,"application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_ACTIVITY_NEW_TASK);
+            a.runOnUiThread(()->{
+                try{a.startActivity(i);}catch(Exception e){
+                    msg("Install update","Allow METMC OS NEXT to install unknown apps, then retry.");
+                }
+            });
+            // Non-root Android package installation requires user confirmation, so cleanup
+            // is performed by the PackageInstaller result receiver in a future signed build.
+        }catch(Exception e){msg("Install update",e.toString());}
+    }
+
+    void restart(){
+        try{
+            Intent i=a.getPackageManager().getLaunchIntentForPackage(a.getPackageName());
+            if(i!=null){i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP);a.startActivity(i);}
+        }catch(Exception ignored){}
+        new Handler().postDelayed(()->System.exit(0),500);
+    }
+
+    String shellQuote(String s){return "'" + s.replace("'","'\\''") + "'";}
+
     void msg(String t,String m){new AlertDialog.Builder(a).setTitle(t).setMessage(m).setPositiveButton("OK",null).show();}
+
     String read(InputStream in)throws Exception{
         BufferedReader r=new BufferedReader(new InputStreamReader(in));
         StringBuilder s=new StringBuilder(); String l;
