@@ -38,13 +38,12 @@ public class MainActivity extends Activity {
 
     void launchTerminal() {
         try {
-            Intent i = new Intent(Intent.ACTION_MAIN);
-            i.setPackage("com.termux");
+            Intent i = new Intent(this, LinuxTerminalActivity.class);
             startActivity(i);
         } catch (Exception e) {
             new AlertDialog.Builder(this)
-                    .setTitle("Terminal")
-                    .setMessage("Termux is not installed. METMC Terminal integration is ready for the Linux layer.")
+                    .setTitle("METMC Terminal")
+                    .setMessage("Unable to start the Debian chroot terminal: " + e.getMessage())
                     .setPositiveButton("OK", null).show();
         }
     }
