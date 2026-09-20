@@ -196,7 +196,12 @@ public class MainActivity extends Activity {
         }
         if (terminalOutput != null) {
             ViewParent p=terminalOutput.getParent();
-            if(p instanceof ViewGroup) ((ViewGroup)p).removeView((View)p);
+            if(p instanceof ViewGroup) {
+                ViewGroup parent=(ViewGroup)p;
+                parent.removeView(terminalOutput);
+                ViewParent gp=parent.getParent();
+                if(gp instanceof ViewGroup) ((ViewGroup)gp).removeView(parent);
+            }
             terminalOutput=null;
         }
         closeTerminalShell();
