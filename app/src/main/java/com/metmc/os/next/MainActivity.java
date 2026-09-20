@@ -16,6 +16,7 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.rgb(7,10,15));
         getWindow().getDecorView().setSystemUiVisibility(
@@ -123,12 +124,7 @@ public class MainActivity extends Activity {
         }
 
         void drawDesktop(Canvas c,int w,int h) {
-            if(activeWindow == null) {
-                // clean desktop status, not giant placeholder text
-                text(c,"METMC OS",32,96,12,0xff8290a4);
-                text(c,"Ready",32,118,22,0xffe8edf5);
-                text(c,"Native Android desktop",32,141,13,0xff9ca8b9);
-            }
+            // Clean home screen: wallpaper only, with no placeholder text.
         }
 
         void drawDock(Canvas c,int w,int h) {
