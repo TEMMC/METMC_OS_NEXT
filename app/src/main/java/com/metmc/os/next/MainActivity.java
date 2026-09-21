@@ -308,9 +308,24 @@ public class MainActivity extends Activity {
         });
     }
 
+    String cleanTerminalText(String s) {
+        if (s == null || s.isEmpty()) return "";
+        String out = s.replace("\u0000", "");
+        out = out.replaceAll("\\u001B\\][^\\u0007]*(?:\\u0007|\\u001B\\\\)", "");
+        out = out.replaceAll("\\u001B\\[[0-?]*[ -/]*[@-~]", "");
+        out = out.replaceAll("\\u001B[()][0-2A-Za-z]", "");
+        out = out.replace("\u001B", "");
+        out = out.replace("\u0007", "");
+        out = out.replace("\r", "");
+        out = out.replace("\b", "");
+        return out;
+    }
+
     void appendTerminal(String s) {
         if (terminalOutput != null) {
-            terminalOutput.append(s);
+            String clean = cleanTerminalText(s);
+            if (clean.isEmpty()) return;
+            terminalOutput.append(clean);
             terminalOutput.post(() -> {
                 if (terminalOutput.getParent() instanceof ScrollView) ((ScrollView)terminalOutput.getParent()).fullScroll(View.FOCUS_DOWN);
             });
@@ -944,8 +959,11 @@ public class MainActivity extends Activity {
                 drawMediaWindowContent(c,l,t,rr,bb);
             } else if(title.equals("Settings")){
                 drawSettingsWindowContent(c,l,t,rr,bb);
-            } else if(title.equals("Applications") || title.equals("Quick Settings") || title.equals("Notifications")
-                    || title.equals("Clipboard") || title.equals("Wallpaper Manager") || title.equals("Overview")){
+            } else if(title.equals("Applications")){
+                drawApplicationsWindowContent(c,l,t,rr,bb);
+            } else if(title.equals("Quick Settings") || title.equals("Notifications")
+                    || title.equals("Clipboard") || title.equals("Wallpaper Manager") || title.equals("Overview")
+                    || title.equals("Desktop & Workspaces") || title.equals("System Update") || title.equals("Session Manager")){
                 drawUtilityWindowContent(c,l,t,rr,bb,title);
             } else {
                 bold(c,title,l+28,t+82,20,Color.WHITE);
@@ -967,7 +985,7 @@ public class MainActivity extends Activity {
 
         float windowContentHeight(String title,WindowState ws){
             if("Settings".equals(title)) return 62f+8f*52f+40f;
-            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*88f+50f;
+            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*122f+50f;
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
@@ -1451,7 +1469,7 @@ public class MainActivity extends Activity {
             if(surface==Surface.APPS){
                 refreshAndroidApps();
                 if(scrollingSurface) return true;
-                String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-112)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
+                String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-112)/3f,top=138-surfaceScroll;int total=n.length+androidApps.size();
                 for(int i=0;i<total;i++){
                     int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
                     if(x>=l-8&&x<=l+cw+8&&y>=t-8&&y<=t+104){
@@ -1598,11 +1616,3 @@ public class MainActivity extends Activity {
             recentItems.remove(name); recentItems.add(0,name);
             addNotification(name+" opened");
             while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
-            bringToFront(name);
-            surface=Surface.DESKTOP;
-            resetSurfaceScroll();
-            if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
-            invalidate();
-        }
-    }
-}
