@@ -545,7 +545,7 @@ public class MainActivity extends Activity {
                     String title=a[0]; WindowState ws=windowFor(title);
                     ws.l=Float.parseFloat(a[1]); ws.t=Float.parseFloat(a[2]); ws.r=Float.parseFloat(a[3]); ws.b=Float.parseFloat(a[4]);
                     ws.minimized=Boolean.parseBoolean(a[5]); ws.maximized=Boolean.parseBoolean(a[6]); clampWindow(ws);
-                    if("Applications".equals(name)) refreshAndroidApps();
+                    if("Applications".equals(title)) refreshAndroidApps();
             windowScroll=0;
             ArrayList<String> list=workspaceWindows.get(currentWorkspace); if(list==null){list=new ArrayList<>();workspaceWindows.put(currentWorkspace,list);}
                     if(!list.contains(title)) list.add(title);
