@@ -381,6 +381,7 @@ public class MainActivity extends Activity {
         terminalOutput.setTextColor(0xffd8f7df);
         terminalOutput.setTextSize(14);
         terminalOutput.setTypeface(Typeface.MONOSPACE);
+        terminalOutput.setLineSpacing(0f,1.0f);
         terminalOutput.setIncludeFontPadding(false);
         terminalOutput.setPadding(14,10,14,10);
         terminalOutput.setGravity(Gravity.TOP|Gravity.START);
@@ -396,11 +397,12 @@ public class MainActivity extends Activity {
         root.addView(scroll, sp);
 
         terminalPrompt = new TextView(this);
-        terminalPrompt.setText("root@debian:~$ ");
+        terminalPrompt.setText("root@debian:~$");
         terminalPrompt.setTextColor(0xff39ff88);
         terminalPrompt.setTextSize(14);
         terminalPrompt.setTypeface(Typeface.MONOSPACE);
-        terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
+        terminalPrompt.setPadding(12,0,0,0);
         terminalPrompt.setBackgroundColor(0xff0d1418);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(112,48);
         pp.leftMargin=32; pp.gravity=Gravity.TOP; pp.topMargin=0;
@@ -419,7 +421,8 @@ public class MainActivity extends Activity {
         terminalInput.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         terminalInput.setSingleLine(true);
         terminalInput.setHint("");
-        terminalInput.setPadding(0,0,8,0);
+        terminalInput.setPadding(6,0,8,0);
+        terminalInput.setSelectAllOnFocus(false);
         terminalInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         terminalInput.setBackgroundColor(Color.TRANSPARENT);
         terminalInput.setOnEditorActionListener((v,id,event)->{
@@ -985,7 +988,7 @@ public class MainActivity extends Activity {
 
         float windowContentHeight(String title,WindowState ws){
             if("Settings".equals(title)) return 62f+8f*52f+40f;
-            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*122f+50f;
+            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+50f;
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
@@ -1025,19 +1028,22 @@ public class MainActivity extends Activity {
             c.clipRect(l+12,t+54,r-12,b-12);
             for(int i=0;i<total;i++){
                 int col=i%3,row=i/3;
-                float x=l+16+col*(cw+8), y=top+row*88;
-                if(y+78>b-12) break;
-                round(c,x,y,x+cw,y+78,12,0xff151d27);
-                if(i<n.length){
-                    drawAppIcon(c,x+10,y+19,n[i]);
-                    bold(c,n[i],x+60,y+31,12,Color.WHITE);
-                    text(c,appSubtitle(n[i]),x+60,y+50,8,0xff8d9aab);
-                } else {
-                    ResolveInfo ri=androidApps.get(i-n.length);
-                    String name=String.valueOf(ri.loadLabel(getPackageManager()));
-                    drawAndroidIcon(c,x+10,y+19,ri);
-                    bold(c,name,x+60,y+31,11,Color.WHITE);
-                    text(c,ri.activityInfo.packageName,x+60,y+50,7,0xff718093);
+                float x=l+16+col*(cw+8), y=top+row*116;
+                if(y+104<b-12 && y+104>=t+54){
+                    round(c,x,y,x+cw,y+104,12,0xff151d27);
+                    if(i<n.length){
+                        drawAppIcon(c,x+10,y+25,n[i]);
+                        bold(c,n[i],x+60,y+37,12,Color.WHITE);
+                        text(c,appSubtitle(n[i]),x+60,y+58,8,0xff8d9aab);
+                        text(c,"CLICK TO OPEN",x+60,y+78,7,0xff39ff88);
+                    } else {
+                        ResolveInfo ri=androidApps.get(i-n.length);
+                        String name=String.valueOf(ri.loadLabel(getPackageManager()));
+                        drawAndroidIcon(c,x+10,y+25,ri);
+                        bold(c,name,x+60,y+37,11,Color.WHITE);
+                        text(c,ri.activityInfo.packageName,x+60,y+58,7,0xff718093);
+                        text(c,"CLICK TO LAUNCH",x+60,y+78,7,0xff39ff88);
+                    }
                 }
             }
             c.restore();
@@ -1292,6 +1298,31 @@ public class MainActivity extends Activity {
                                 else if(qi==5) { lockDesktop(); return true; }
                                 addNotification(qi==5?"Desktop locked":"Quick setting changed");
                                 invalidate();
+                            }
+                            return true;
+                        }
+                        if("Applications".equals(hit.title) && y>hit.t+54 && y<hit.b-10){
+                            float cw=(hit.r-hit.l-48)/3f;
+                            float localY=y-hit.t-62+windowScroll;
+                            int col=(int)((x-(hit.l+16))/(cw+8));
+                            int row=(int)(localY/116f);
+                            int ai=row*3+col;
+                            float cardX=hit.l+16+col*(cw+8), cardY=hit.t+62+row*116-windowScroll;
+                            if(col>=0&&col<3&&row>=0&&ai>=0&&ai<n.length+androidApps.size()
+                                    &&x>=cardX&&x<=cardX+cw&&y>=cardY&&y<=cardY+104){
+                                String[] appNames={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
+                                if(ai<appNames.length){
+                                    String a=appNames[ai];
+                                    if(a.equals("Terminal")) launchTerminal();
+                                    else if(a.equals("Browser")) launchBrowser();
+                                    else if(a.equals("Files")) showWindow("Files");
+                                    else if(a.equals("Settings")) showWindow("Settings");
+                                    else if(a.equals("Media")) showWindow("Media");
+                                    else showWindow("Linux Apps");
+                                } else {
+                                    launchAndroidApp(androidApps.get(ai-appNames.length));
+                                }
+                                return true;
                             }
                             return true;
                         }
