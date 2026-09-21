@@ -1616,3 +1616,11 @@ public class MainActivity extends Activity {
             recentItems.remove(name); recentItems.add(0,name);
             addNotification(name+" opened");
             while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
+            bringToFront(name);
+            surface=Surface.DESKTOP;
+            resetSurfaceScroll();
+            if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
+            invalidate();
+        }
+    }
+}
