@@ -248,7 +248,7 @@ public class MainActivity extends Activity {
 
     void startTerminalShell() {
         if (terminalShell != null && terminalShell.isAlive()) return;
-        if (terminalOutput != null) terminalOutput.setText("");
+        if (terminalOutput != null) terminalOutput.setText("METMC Debian Terminal\n");
         terminalHistoryIndex = -1;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
@@ -294,7 +294,7 @@ public class MainActivity extends Activity {
         terminalHistory.add(cmd);
         while (terminalHistory.size() > 100) terminalHistory.remove(0);
         terminalHistoryIndex = terminalHistory.size();
-        appendTerminal("root@debian:~$ " + cmd + "\n");
+        appendTerminal(cmd + "\n");
         try {
             terminalStdin.write(cmd);
             terminalStdin.newLine();
@@ -333,14 +333,17 @@ public class MainActivity extends Activity {
 
         terminalOutput = new TextView(this);
         terminalOutput.setTextColor(0xffd8f7df);
-        terminalOutput.setTextSize(13);
+        terminalOutput.setTextSize(14);
         terminalOutput.setTypeface(Typeface.MONOSPACE);
+        terminalOutput.setIncludeFontPadding(false);
         terminalOutput.setPadding(14,10,14,10);
         terminalOutput.setGravity(Gravity.TOP|Gravity.START);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xff080c0d);
         scroll.setFillViewport(false);
+        scroll.setVerticalScrollBarEnabled(true);
+        scroll.setScrollbarFadingEnabled(false);
         scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-2));
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
         sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=155; sp.bottomMargin=128;
@@ -349,7 +352,7 @@ public class MainActivity extends Activity {
         terminalPrompt = new TextView(this);
         terminalPrompt.setText("root@debian:~$ ");
         terminalPrompt.setTextColor(0xff39ff88);
-        terminalPrompt.setTextSize(13);
+        terminalPrompt.setTextSize(14);
         terminalPrompt.setTypeface(Typeface.MONOSPACE);
         terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
         terminalPrompt.setBackgroundColor(0xff0d1418);
@@ -362,15 +365,20 @@ public class MainActivity extends Activity {
         terminalInput.setTextColor(Color.WHITE);
         terminalInput.setHintTextColor(0xff536575);
         terminalInput.setHint("type a command");
-        terminalInput.setTextSize(13);
+        terminalInput.setTextSize(14);
         terminalInput.setTypeface(Typeface.MONOSPACE);
+        terminalInput.setIncludeFontPadding(false);
+        terminalInput.setHorizontallyScrolling(true);
+        terminalInput.setScrollHorizontally(true);
+        terminalInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
         terminalInput.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         terminalInput.setSingleLine(true);
         terminalInput.setHint("");
-        terminalInput.setPadding(2,0,8,0);
+        terminalInput.setPadding(0,0,8,0);
         terminalInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         terminalInput.setBackgroundColor(Color.TRANSPARENT);
         terminalInput.setOnEditorActionListener((v,id,event)->{ sendTerminalCommand(); return true; });
+        terminalInput.setOnFocusChangeListener((v,has)->{ if(has) terminalInput.post(()->terminalInput.setSelection(terminalInput.length())); });
         terminalInput.setOnKeyListener((v,key,event)->{
             if(event.getAction()!=KeyEvent.ACTION_DOWN) return false;
             if(key==KeyEvent.KEYCODE_DPAD_UP){ terminalHistoryMove(-1); return true; }
@@ -429,8 +437,13 @@ public class MainActivity extends Activity {
         boolean showSearch=false;
         android.content.ClipboardManager clipboardManager;
         final LinkedHashMap<String,String> fileEntries=new LinkedHashMap<>();
-        float downX,downY,appsScroll=0;
+        float downX,downY,appsScroll=0,lastTouchY=0;
         float appsContentHeight=0;
+        float surfaceScroll=0;
+        float windowScroll=0;
+        boolean scrollingSurface=false;
+        boolean scrollingWindow=false;
+        String scrollingWindowTitle=null;
         int accent=0xff39ff88;
         String fileDirectory="/storage/emulated/0";
         String fileParentDirectory=null;
@@ -471,8 +484,20 @@ public class MainActivity extends Activity {
             float rows=(float)Math.ceil((6+androidApps.size())/3.0);
             appsContentHeight=rows*122f;
             float max=Math.max(0,appsContentHeight-(getHeight()-270));
-            if(appsScroll>max) appsScroll=max;
+            if(surfaceScroll>max) surfaceScroll=max;
         }
+        void resetSurfaceScroll(){ surfaceScroll=0; }
+        float surfaceContentHeight(){
+            if(surface==Surface.APPS) return 138f+(float)Math.ceil((6+androidApps.size())/3.0)*122f+90f;
+            if(surface==Surface.SETTINGS) return 136f+8f*57f+70f;
+            if(surface==Surface.NOTIFICATIONS) return 136f+Math.max(1,Math.min(30,notifications.size()))*42f+80f;
+            if(surface==Surface.CLIPBOARD) return 136f+Math.max(1,Math.min(20,clipboardHistory.size()))*48f+80f;
+            if(surface==Surface.WALLPAPER) return 140f+3f*150f+80f;
+            if(surface==Surface.OVERVIEW) return 140f+((openWindows.size()+1)/2)*142f+170f;
+            return getHeight()-82;
+        }
+        float maxSurfaceScroll(){ return Math.max(0,surfaceContentHeight()-(getHeight()-82)); }
+        void clampSurfaceScroll(){ surfaceScroll=Math.max(0,Math.min(maxSurfaceScroll(),surfaceScroll)); }
 
         void saveSession(){
             try{
@@ -631,9 +656,9 @@ public class MainActivity extends Activity {
 
         void drawApps(Canvas c,int w,int h){
             overlay(c,w,h);bold(c,"Applications",28,92,25,Color.WHITE);
-            text(c,androidApps.size()+" launchable Android apps detected",28,116,13,0xff9daabd);
+            text(c,(6+androidApps.size())+" METMC + Android applications",28,116,13,0xff9daabd);
             String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
-            int total=n.length+androidApps.size();float cw=(w-112)/3f,top=138-appsScroll;
+            int total=n.length+androidApps.size();float cw=(w-112)/3f,top=138-surfaceScroll;
             c.save();c.clipRect(20,130,w-20,h-88);
             for(int i=0;i<total;i++){
                 int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
@@ -655,6 +680,13 @@ public class MainActivity extends Activity {
             round(c,28,h-76,w-28,h-34,14,0xff151d27);
             text(c,"⌕",47,h-48,20,0xffaeb9c8);
             text(c,"Installed Android + METMC applications",77,h-50,13,0xff98a5b6);
+            if(maxSurfaceScroll()>0){
+                float trackTop=132,trackBottom=h-92,trackH=trackBottom-trackTop;
+                float thumbH=Math.max(34,trackH*(trackH/surfaceContentHeight()));
+                float thumbY=trackTop+(trackH-thumbH)*(surfaceScroll/maxSurfaceScroll());
+                round(c,w-16,trackTop,w-10,trackBottom,3,0x334f6478);
+                round(c,w-16,thumbY,w-10,thumbY+thumbH,3,0xff6d8195);
+            }
         }
 
         String appSubtitle(String s){if(s.equals("Files"))return"File manager";if(s.equals("Terminal"))return"Native Debian terminal";if(s.equals("Browser"))return"Web browser";if(s.equals("Settings"))return"System controls";if(s.equals("Media"))return"Media player";return"Linux integration";}
@@ -845,6 +877,9 @@ public class MainActivity extends Activity {
             round(c,rr-44,t+12,rr-16,t+38,7, title.equals(activeWindow)?0xff6b2630:0xff263342);
             text(c,"×",rr-37,t+30,14,0xffffffff);
 
+            c.save();
+            c.clipRect(l+10,t+52,rr-10,bb-10);
+            if(!title.equals("Terminal")) c.translate(0,-windowScroll);
             if(title.equals("Terminal")){
                 text(c,"DEBIAN  •  /bin/bash  •  /data/local/linux/rootfs",l+28,t+82,10,0xff7f9b8b);
             } else if(title.equals("Files")){
@@ -864,10 +899,31 @@ public class MainActivity extends Activity {
                 text(c,"Native METMC application window",l+28,t+107,12,0xff8f9cad);
             }
 
+            c.restore();
+            if(!title.equals("Terminal") && windowScrollMax(title,ws)>0){
+                float trackTop=t+58,trackBottom=bb-14,trackH=trackBottom-trackTop;
+                float thumbH=Math.max(28,trackH*(trackH/windowContentHeight(title,ws)));
+                float thumbY=trackTop+(trackH-thumbH)*(windowScroll/windowScrollMax(title,ws));
+                round(c,rr-12,trackTop,rr-7,trackBottom,3,0x334f6478);
+                round(c,rr-12,thumbY,rr-7,thumbY+thumbH,3,0xff6d8195);
+            }
             // Resize grip.
             stroke(c,0xff536476,1.2f);
             for(int i=0;i<3;i++){c.drawLine(rr-18-i*6,bb-5,rr-5,bb-18-i*6,p);}
         }
+
+        float windowContentHeight(String title,WindowState ws){
+            if("Settings".equals(title)) return 62f+8f*52f+40f;
+            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*88f+50f;
+            if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
+            if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
+            if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
+            if("Overview".equals(title)) return 92f+((openWindows.size()+1)/2)*82f+60f;
+            if("Files".equals(title)) return 142f+Math.max(1,(fileEntries.size()+2)/3)*72f+30f;
+            if("Linux Apps".equals(title)) return 180f;
+            return Math.max(1,ws.b-ws.t-70);
+        }
+        float windowScrollMax(String title,WindowState ws){ return Math.max(0,windowContentHeight(title,ws)-(ws.b-ws.t-62)); }
 
         void drawSettingsWindowContent(Canvas c,float l,float t,float r,float b){
             String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session"};
@@ -1029,7 +1085,8 @@ public class MainActivity extends Activity {
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX(),y=e.getY();int h=getHeight(),w=getWidth();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
-                downX=x;downY=y;
+                downX=x;downY=y;lastTouchY=y;
+                scrollingSurface=false;scrollingWindow=false;scrollingWindowTitle=null;
                 if(surface==Surface.DESKTOP){
                     // Shell chrome is a higher interaction layer than application windows.
                     // Prevent an application window from stealing dock/task-switcher taps.
@@ -1078,9 +1135,13 @@ public class MainActivity extends Activity {
                         }
                     }
                     if(hit!=null){
+                        if(!hit.title.equals(scrollingWindowTitle)) windowScroll=0;
                         bringToFront(hit.title);
                         if(hit.maximized) return true;
                         float rr=hit.r,bb=hit.b;
+                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
+                            scrollingWindow=true; scrollingWindowTitle=hit.title;
+                        }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62))/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
@@ -1155,6 +1216,18 @@ public class MainActivity extends Activity {
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
+                float dy=lastTouchY-y;
+                if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>10) scrollingSurface=true;
+                if(surface!=Surface.DESKTOP && scrollingSurface){
+                    surfaceScroll+=dy; clampSurfaceScroll(); lastTouchY=y; invalidate(); return true;
+                }
+                if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){
+                    WindowState sws=windows.get(scrollingWindowTitle);
+                    if(sws!=null){
+                        windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll));
+                        lastTouchY=y; invalidate(); return true;
+                    }
+                }
                 if(surface==Surface.DESKTOP&&draggingWindow!=null){
                     WindowState ws=windows.get(draggingWindow);
                     if(ws!=null&&!ws.maximized){
@@ -1171,10 +1244,11 @@ public class MainActivity extends Activity {
                     }
                     return true;
                 }
-                if(surface==Surface.APPS&&Math.abs(y-downY)>8){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));downY=y;invalidate();return true;}
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_CANCEL||e.getAction()==MotionEvent.ACTION_UP){
+                if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; return true; }
+                if(scrollingWindow){ scrollingWindow=false; scrollingWindowTitle=null; return true; }
                 if(draggingWindow!=null){
                     String moved=draggingWindow;
                     if(e.getAction()==MotionEvent.ACTION_UP && dragging){
@@ -1253,7 +1327,8 @@ public class MainActivity extends Activity {
                 if(x<l||x>r||y<70||y>h-92){surface=Surface.DESKTOP;invalidate();return true;}
             }
             if(surface==Surface.APPS){
-                if(Math.abs(y-downY)>24){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));invalidate();return true;}
+                refreshAndroidApps();
+                if(scrollingSurface) return true;
                 String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-112)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
                 for(int i=0;i<total;i++){
                     int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
@@ -1395,6 +1470,7 @@ public class MainActivity extends Activity {
             while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
             bringToFront(name);
             surface=Surface.DESKTOP;
+            resetSurfaceScroll();
             if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
             invalidate();
         }
