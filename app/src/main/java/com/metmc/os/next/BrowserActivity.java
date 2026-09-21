@@ -28,6 +28,8 @@ public class BrowserActivity extends Activity {
     static final int TEXT=0xffedf4fb;
     static final int MUTED=0xff91a4b6;
     static final int ACCENT=0xff4fd1ff;
+    static final String DEFAULT_HOME="https://search.yahoo.com/";
+    static final String SEARCH="https://search.yahoo.com/search?p=";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -198,7 +200,7 @@ public class BrowserActivity extends Activity {
         setContentView(root);
 
         Uri incoming=getIntent().getData();
-        String url=incoming!=null?incoming.toString():"https://www.google.com";
+        String url=incoming!=null?incoming.toString():DEFAULT_HOME;
         address.setText(url);
         web.loadUrl(url);
         address.setOnEditorActionListener((v,id,event)->{navigate();return true;});
@@ -242,7 +244,7 @@ public class BrowserActivity extends Activity {
         if(value.isEmpty())return;
         if(!value.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*")){
             if(value.contains(" ")||!value.contains(".")){
-                value="https://www.google.com/search?q="+Uri.encode(value);
+                value=SEARCH+Uri.encode(value);
             }else{
                 value="https://"+value;
             }
@@ -253,8 +255,8 @@ public class BrowserActivity extends Activity {
     }
 
     void loadHome(){
-        address.setText("https://www.google.com");
-        web.loadUrl("https://www.google.com");
+        address.setText(DEFAULT_HOME);
+        web.loadUrl(DEFAULT_HOME);
     }
 
     void showMenu(View anchor){
@@ -273,7 +275,7 @@ public class BrowserActivity extends Activity {
         popup.getMenu().add("Page information");
         popup.setOnMenuItemClickListener(item->{
             String x=item.getTitle().toString();
-            if("New tab".equals(x)){address.setText("");web.loadUrl("https://www.google.com");}
+            if("New tab".equals(x)){address.setText(DEFAULT_HOME);web.loadUrl(DEFAULT_HOME);}
             else if("Reload".equals(x))web.reload();
             else if("Share page".equals(x)){
                 Intent i=new Intent(Intent.ACTION_SEND);
