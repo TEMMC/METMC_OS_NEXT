@@ -42,7 +42,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { getContentResolver().takePersistableUriPermission(data.getData(),Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",data.getData().toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ desktop.customWallpaper=BitmapFactory.decodeStream(getContentResolver().openInputStream(data.getData())); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } }
+        if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { Uri u=data.getData(); try { getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",u.toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ InputStream in=getContentResolver().openInputStream(u); desktop.customWallpaper=BitmapFactory.decodeStream(in); if(in!=null) in.close(); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } } catch(Exception e) { Toast.makeText(this,"Wallpaper load failed: "+e.getMessage(),Toast.LENGTH_SHORT).show(); } }
     }
 
     @Override protected void onResume() {
