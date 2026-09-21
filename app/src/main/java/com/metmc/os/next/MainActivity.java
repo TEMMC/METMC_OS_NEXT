@@ -1080,6 +1080,7 @@ public class MainActivity extends Activity {
                     if(hit!=null){
                         bringToFront(hit.title);
                         if(hit.maximized) return true;
+                        float rr=hit.r,bb=hit.b;
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62))/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
