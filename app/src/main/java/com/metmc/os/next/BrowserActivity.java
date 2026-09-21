@@ -8,6 +8,8 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.print.PrintManager;
+import android.print.PrintDocumentAdapter;
 import android.text.InputType;
 import android.view.*;
 import android.webkit.*;
@@ -262,6 +264,13 @@ public class BrowserActivity extends Activity {
         popup.getMenu().add("Share page");
         popup.getMenu().add("Set as default browser");
         popup.getMenu().add("Clear browser data");
+        popup.getMenu().add("Find in page");
+        popup.getMenu().add("Zoom in");
+        popup.getMenu().add("Zoom out");
+        popup.getMenu().add("Reset zoom");
+        popup.getMenu().add("Desktop site");
+        popup.getMenu().add("Print page");
+        popup.getMenu().add("Page information");
         popup.setOnMenuItemClickListener(item->{
             String x=item.getTitle().toString();
             if("New tab".equals(x)){address.setText("");web.loadUrl("https://www.google.com");}
@@ -281,6 +290,66 @@ public class BrowserActivity extends Activity {
             return true;
         });
         popup.show();
+    }
+
+    void showFindBar(){
+        final EditText find=new EditText(this);
+        find.setSingleLine(true);
+        find.setHint("Find text on this page");
+        find.setTextColor(TEXT);
+        find.setHintTextColor(MUTED);
+        find.setSelectAllOnFocus(false);
+        LinearLayout box=new LinearLayout(this);
+        box.setPadding(18,4,18,4);
+        box.addView(find,new LinearLayout.LayoutParams(0,52,1));
+        Button next=navButton("Find");
+        next.setOnClickListener(v->{
+            String q=find.getText().toString();
+            if(!q.isEmpty())web.findAllAsync(q);
+        });
+        box.addView(next,new LinearLayout.LayoutParams(64,52));
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("Find in page").setView(box).setNegativeButton("Close",(a,w)->web.clearMatches()).create();
+        d.setOnShowListener(v->{find.requestFocus();d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);});
+        d.show();
+    }
+
+    void toggleDesktopSite(){
+        WebSettings s=web.getSettings();
+        String current=s.getUserAgentString();
+        boolean desktop=current!=null && current.contains("METMCDesktop");
+        if(desktop){
+            s.setUserAgentString(null);
+            Toast.makeText(this,"Desktop site disabled.",Toast.LENGTH_SHORT).show();
+        }else{
+            String ua=current==null?"":current;
+            if(ua.isEmpty())ua="Mozilla/5.0";
+            s.setUserAgentString(ua+" METMCDesktop");
+            Toast.makeText(this,"Desktop site enabled.",Toast.LENGTH_SHORT).show();
+        }
+        web.reload();
+    }
+
+    void printPage(){
+        try{
+            PrintManager pm=(PrintManager)getSystemService(PRINT_SERVICE);
+            if(pm!=null){
+                PrintDocumentAdapter adapter=web.createPrintDocumentAdapter("METMC Browser");
+                pm.print("METMC Browser - "+(title==null?"Page":title.getText()),adapter,new android.print.PrintAttributes.Builder().build());
+            }
+        }catch(Exception e){
+            Toast.makeText(this,"Printing is not available.",Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    void showPageInfo(){
+        String url=web.getUrl();
+        String pageTitle=web.getTitle();
+        String scheme="";
+        try{scheme=Uri.parse(url==null?"":url).getScheme();}catch(Exception ignored){}
+        String text="Title: "+(pageTitle==null||pageTitle.isEmpty()?"Untitled":pageTitle)
+                +"\\n\\nAddress: "+(url==null?"":url)
+                +"\\n\\nConnection: "+("https".equalsIgnoreCase(scheme)?"HTTPS / encrypted":"Not verified as HTTPS");
+        new AlertDialog.Builder(this).setTitle("Page information").setMessage(text).setPositiveButton("OK",null).show();
     }
 
     void requestDefaultBrowser(){
