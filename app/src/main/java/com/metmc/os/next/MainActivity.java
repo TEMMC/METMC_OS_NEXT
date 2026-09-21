@@ -500,6 +500,7 @@ public class MainActivity extends Activity {
             text(c,"METMC OS NEXT",Math.max(400,w/2f-48),34,11,0xff8da0b4);
             text(c,new SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),w-92,33,14,Color.WHITE);
             text(c,"⌁",w-44,34,15,0xff8da0b4);
+            if(!notifications.isEmpty()) { fill(c,0xffff5c6c); c.drawCircle(w-26,13,4,p); }
         }
 
         void switchWorkspace(int target){
@@ -843,6 +844,7 @@ public class MainActivity extends Activity {
                                 }
                             }
                             if(x>left+dw-112 && x<=left+dw-65){surface=Surface.CLIPBOARD;invalidate();return true;}
+                            if(x>left+dw-44){surface=Surface.NOTIFICATIONS;invalidate();return true;}
                             if(x>left+dw-65){surface=Surface.QUICK;invalidate();return true;}
                             if(x>left+dw-12){surface=Surface.NOTIFICATIONS;invalidate();return true;}
                         }
@@ -978,7 +980,7 @@ public class MainActivity extends Activity {
             }
 
             if(surface==Surface.SETTINGS){
-                for(int i=0;i<6;i++){float yy=136+i*66;if(y>=yy&&y<=yy+56){if(i==0)surface=Surface.WALLPAPER;else if(i==1)surface=Surface.QUICK;else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)showWindow("Security");else new Updater(MainActivity.this).check();invalidate();return true;}}
+                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)surface=Surface.WALLPAPER;else if(i==1){surface=Surface.DESKTOP;addNotification("Desktop settings ready");}else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)showWindow("Security");else if(i==5)new Updater(MainActivity.this).check();else if(i==6)surface=Surface.CLIPBOARD;else if(i==7){saveSession();addNotification("Session saved");}invalidate();return true;}}
             }
 
             return true;
