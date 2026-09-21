@@ -26,6 +26,8 @@ public class MainActivity extends Activity {
     int terminalHistoryIndex = -1;
     java.lang.Process terminalShell;
     LinearLayout terminalToolbar;
+    boolean interactiveTerminalMode=false;
+    boolean suppressTerminalBridge=false;
     static final int PICK_WALLPAPER = 9001;
     static final String ROOTFS = "/data/local/linux/rootfs";
     android.content.SharedPreferences prefs;
@@ -248,13 +250,16 @@ public class MainActivity extends Activity {
 
     void launchLinuxTool(String command) {
         desktop.showWindow("Terminal");
+        interactiveTerminalMode = command.equals("vim") || command.equals("nano") || command.equals("htop") || command.equals("python3");
         startTerminalShell();
         final Handler handler = new Handler(Looper.getMainLooper());
         final long deadline = SystemClock.uptimeMillis() + 5000;
         Runnable send = new Runnable() {
             @Override public void run() {
                 if (terminalStdin != null && terminalShell != null && terminalShell.isAlive()) {
+                    suppressTerminalBridge=true;
                     terminalInput.setText(command);
+                    suppressTerminalBridge=false;
                     sendTerminalCommand();
                     terminalInput.requestFocus();
                 } else if (SystemClock.uptimeMillis() < deadline) {
@@ -271,6 +276,7 @@ public class MainActivity extends Activity {
         if (terminalShell != null && terminalShell.isAlive()) return;
         if (terminalOutput != null) terminalOutput.setText("METMC Debian Terminal\n");
         terminalHistoryIndex = -1;
+        interactiveTerminalMode = false;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 String script = "R='" + ROOTFS + "'; " +
@@ -294,7 +300,9 @@ public class MainActivity extends Activity {
                     String s = new String(b,0,n);
                     runOnUiThread(() -> appendTerminal(s));
                 }
+                interactiveTerminalMode=false;
             } catch (Exception e) {
+                interactiveTerminalMode=false;
                 runOnUiThread(() -> appendTerminal("\n[METMC] Terminal startup failed: " + e + "\n"));
             }
         });
@@ -399,7 +407,27 @@ public class MainActivity extends Activity {
         terminalInput.setPadding(0,0,8,0);
         terminalInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         terminalInput.setBackgroundColor(Color.TRANSPARENT);
-        terminalInput.setOnEditorActionListener((v,id,event)->{ sendTerminalCommand(); return true; });
+        terminalInput.setOnEditorActionListener((v,id,event)->{
+            if(interactiveTerminalMode){
+                try{ if(terminalStdin!=null){ terminalStdin.write("\n"); terminalStdin.flush(); } }catch(Exception ignored){}
+                suppressTerminalBridge=true; terminalInput.setText(""); suppressTerminalBridge=false; return true;
+            }
+            sendTerminalCommand(); return true;
+        });
+        terminalInput.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int start,int count,int after){
+                if(interactiveTerminalMode && !suppressTerminalBridge && count>after){
+                    try{ if(terminalStdin!=null){ for(int i=0;i<count-after;i++) terminalStdin.write(127); terminalStdin.flush(); } }catch(Exception ignored){}
+                }
+            }
+            public void onTextChanged(CharSequence s,int start,int before,int count){
+                if(interactiveTerminalMode && !suppressTerminalBridge && count>0){
+                    try{ if(terminalStdin!=null){ terminalStdin.write(s.subSequence(start,start+count).toString()); terminalStdin.flush(); } }catch(Exception ignored){}
+                    suppressTerminalBridge=true; terminalInput.setText(""); suppressTerminalBridge=false;
+                }
+            }
+            public void afterTextChanged(android.text.Editable e){}
+        });
         terminalInput.setOnFocusChangeListener((v,has)->{ if(has) terminalInput.post(()->terminalInput.setSelection(terminalInput.length())); });
         terminalInput.setOnKeyListener((v,key,event)->{
             if(event.getAction()!=KeyEvent.ACTION_DOWN) return false;
@@ -947,6 +975,9 @@ public class MainActivity extends Activity {
             if("Files".equals(title)) return 142f+Math.max(1,(fileEntries.size()+2)/3)*72f+30f;
             if("Linux Apps".equals(title)) return 360f;
             if("Media".equals(title)) return 300f;
+            if("Desktop & Workspaces".equals(title)) return 430f;
+            if("System Update".equals(title)) return 300f;
+            if("Session Manager".equals(title)) return 300f;
             return Math.max(1,ws.b-ws.t-70);
         }
         float windowScrollMax(String title,WindowState ws){ return Math.max(0,windowContentHeight(title,ws)-(ws.b-ws.t-62)); }
@@ -1060,6 +1091,30 @@ public class MainActivity extends Activity {
                     drawWallpaperPreview(c,x+6,y+6,bw-12,58,i);
                     text(c,names[i],x+10,y+75,8,Color.WHITE);
                 }
+            } else if(title.equals("Desktop & Workspaces")){
+                bold(c,"Desktop & Workspaces",l+28,t+82,20,Color.WHITE);
+                text(c,"Configure the METMC desktop session",l+28,t+107,11,0xff8f9cad);
+                String[] rows={"Workspace 1","Workspace 2","Workspace 3","Workspace 4","Window gaps","Restore session"};
+                for(int i=0;i<rows.length;i++){
+                    float y=t+130+i*42;
+                    round(c,l+20,y,r-20,y+34,9,0xff18212c);
+                    text(c,rows[i],l+34,y+22,10,Color.WHITE);
+                    text(c,i<4?(currentWorkspace==i+1?"ACTIVE":"SWITCH"):"OPEN",r-86,y+22,8,0xff39ff88);
+                }
+            } else if(title.equals("System Update")){
+                bold(c,"System Update",l+28,t+82,20,Color.WHITE);
+                text(c,"METMC OS NEXT update service",l+28,t+107,11,0xff8f9cad);
+                round(c,l+22,t+130,r-22,t+178,10,0xff18212c);
+                text(c,"Check GitHub for the latest signed release",l+38,t+159,10,Color.WHITE);
+                round(c,l+22,t+192,r-22,t+238,10,0xff294b39);
+                bold(c,"CHECK FOR UPDATES",l+38,t+221,10,Color.WHITE);
+            } else if(title.equals("Session Manager")){
+                bold(c,"Session Manager",l+28,t+82,20,Color.WHITE);
+                text(c,"Save or restore your METMC desktop session",l+28,t+107,11,0xff8f9cad);
+                round(c,l+22,t+132,r-22,t+180,10,0xff294b39);
+                bold(c,"SAVE CURRENT SESSION",l+38,t+162,10,Color.WHITE);
+                round(c,l+22,t+192,r-22,t+240,10,0xff18212c);
+                bold(c,"RESTORE SAVED SESSION",l+38,t+222,10,Color.WHITE);
             } else if(title.equals("Overview")){
                 text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" windows",l+20,t+76,10,0xff8f9bad);
                 for(int i=0;i<openWindows.size();i++){
@@ -1416,7 +1471,7 @@ public class MainActivity extends Activity {
             }
 
             if(surface==Surface.SETTINGS){
-                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)surface=Surface.WALLPAPER;else if(i==1){surface=Surface.DESKTOP;addNotification("Desktop settings ready");}else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();else if(i==5)new Updater(MainActivity.this).check();else if(i==6)surface=Surface.CLIPBOARD;else if(i==7){saveSession();addNotification("Session saved");}invalidate();return true;}}
+                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)showWindow("Wallpaper Manager");else if(i==1)showWindow("Desktop & Workspaces");else if(i==2)showWindow("Applications");else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();else if(i==5)showWindow("System Update");else if(i==6)showWindow("Clipboard");else if(i==7)showWindow("Session Manager");invalidate();return true;}}
             }
 
             return true;
