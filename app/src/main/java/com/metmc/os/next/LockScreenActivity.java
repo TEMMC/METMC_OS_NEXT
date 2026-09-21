@@ -12,6 +12,7 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import java.util.ArrayList;
+import java.util.Random;
 import java.util.concurrent.Executor;
 
 public class LockScreenActivity extends Activity {
