@@ -380,7 +380,7 @@ public class MainActivity extends Activity {
         void drawWallpaperManager(Canvas c,int w,int h){
             overlay(c,w,h);bold(c,"Wallpaper Manager",30,91,26,Color.WHITE);text(c,"Built-in METMC hacker wallpapers",30,116,12,0xff8f9bad);
             String[] names={"Midnight Grid","Cyber Nexus","Night Ops","Deep Blue","Media Picker"};
-            for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;round(c,l,t,l+w/2f-32,t+130,18,0xff10171e);drawWallpaperPreview(c,l+8,t+8,w/2f-48,114,i);bold(c,names[i],l+20,t+102,13,Color.WHITE);text(c,wallpaper()==i?"ACTIVE":"APPLY",l+w/2f-105,t+102,11,wallpaper()==i?0xff39ff88:0xff9eacbe);
+            for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;round(c,l,t,l+w/2f-32,t+130,18,0xff10171e);drawWallpaperPreview(c,l+8,t+8,w/2f-48,114,i);bold(c,names[i],l+20,t+102,13,Color.WHITE);text(c,wallpaper()==i?"ACTIVE":"APPLY",l+w/2f-105,t+102,11,wallpaper()==i?0xff39ff88:0xff9eacbe);}
             text(c,"Tap a wallpaper to apply it instantly.",30,h-105,12,0xff9aa7b8);
         }
 
