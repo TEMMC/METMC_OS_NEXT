@@ -369,7 +369,6 @@ public class MainActivity extends Activity {
         terminalInput.setTypeface(Typeface.MONOSPACE);
         terminalInput.setIncludeFontPadding(false);
         terminalInput.setHorizontallyScrolling(true);
-        terminalInput.setScrollHorizontally(true);
         terminalInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
         terminalInput.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         terminalInput.setSingleLine(true);
