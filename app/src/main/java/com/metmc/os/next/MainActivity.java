@@ -53,8 +53,8 @@ public class MainActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (desktop == null) { super.onBackPressed(); return; }
-        if (desktop.surface != DesktopView.Surface.DESKTOP) {
-            desktop.surface = DesktopView.Surface.DESKTOP;
+        if (desktop.surface != Surface.DESKTOP) {
+            desktop.surface = Surface.DESKTOP;
             desktop.invalidate();
             desktop.syncTerminalOverlay();
             return;
@@ -250,6 +250,12 @@ public class MainActivity extends Activity {
         boolean dragging=false,resizing=false;
         float dragOffsetX,dragOffsetY;
         final float MIN_W=280f, MIN_H=190f;
+        int currentWorkspace=1;
+        final LinkedHashMap<Integer,ArrayList<String>> workspaceWindows=new LinkedHashMap<>();
+        final ArrayList<String> recentItems=new ArrayList<>();
+        String desktopSearch="";
+        boolean showSearch=false;
+        android.content.ClipboardManager clipboardManager;
         final LinkedHashMap<String,String> fileEntries=new LinkedHashMap<>();
         float downX,downY,appsScroll=0;
         float appsContentHeight=0;
@@ -257,7 +263,7 @@ public class MainActivity extends Activity {
         String fileDirectory="/storage/emulated/0";
         String fileParentDirectory=null;
 
-        DesktopView(Context c){ super(c); setFocusable(true); refreshAndroidApps(); refreshFileEntries(); }
+        DesktopView(Context c){ super(c); setFocusable(true); clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); refreshAndroidApps(); refreshFileEntries(); }
         void refreshFileEntries(){
             fileEntries.clear();
             File dir=new File(fileDirectory);
@@ -290,7 +296,8 @@ public class MainActivity extends Activity {
 
         @Override protected void onDraw(Canvas c){
             int w=getWidth(),h=getHeight();
-            drawWallpaper(c,w,h); drawTopBar(c,w); drawDock(c,w,h);
+            drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h); drawDock(c,w,h);
+            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);
             if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
             else if(surface==Surface.APPS) drawApps(c,w,h);
             else if(surface==Surface.QUICK) drawQuick(c,w,h);
@@ -338,9 +345,39 @@ public class MainActivity extends Activity {
         void drawTopBar(Canvas c,int w){
             fill(c,0xe50a1017);c.drawRect(0,0,w,54,p);
             bold(c,"METMC",22,34,16,Color.WHITE); text(c,"Activities",92,34,14,0xffd7deea);
-            text(c,"WORKSPACE 1",w/2f-47,34,11,0xff8da0b4);
+            text(c,"WORKSPACE "+currentWorkspace,w/2f-47,34,11,0xff8da0b4);
             text(c,new SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),w-92,33,14,Color.WHITE);
             text(c,"⌁",w-44,34,15,0xff8da0b4);
+        }
+
+        void switchWorkspace(int target){
+            if(target<1||target>4||target==currentWorkspace)return;
+            workspaceWindows.put(currentWorkspace,new ArrayList<>(openWindows));
+            currentWorkspace=target;
+            openWindows.clear();
+            ArrayList<String> list=workspaceWindows.get(target);
+            if(list!=null) for(String name:list) if(windows.containsKey(name)) openWindows.add(name);
+            activeWindow=openWindows.isEmpty()?null:openWindows.get(openWindows.size()-1);
+            if(!openWindows.contains("Terminal")) hideTerminalOverlay();
+            syncTerminalOverlay(); invalidate();
+        }
+
+        void drawWorkspaceSwitcher(Canvas c,int w,int h){
+            float l=w/2f-105;
+            for(int i=1;i<=4;i++){
+                boolean active=i==currentWorkspace;
+                round(c,l+(i-1)*52,8,l+34+(i-1)*52,42,10,active?0xff284534:0xff17212b);
+                text(c,String.valueOf(i),l+13+(i-1)*52,30,12,active?0xff39ff88:0xffaab6c4);
+            }
+        }
+
+        void drawDesktopIcons(Canvas c,int w,int h){
+            String[][] icons={{"Files","Files"},{"Terminal","Terminal"},{"Browser","Browser"},{"Apps","apps"}};
+            for(int i=0;i<icons.length;i++){
+                float x=18+(i%2)*86,y=86+(i/2)*92;
+                drawDockIcon(c,x,y,icons[i][1],false);
+                text(c,icons[i][0],x,y+68,10,Color.WHITE);
+            }
         }
 
         void drawDock(Canvas c,int w,int h){
@@ -521,7 +558,7 @@ public class MainActivity extends Activity {
         }
 
         void openFileEntry(String path){
-            if("..".equals(path) && fileParentDirectory!=null) { fileDirectory=fileParentDirectory; refreshFileEntries(); invalidate(); return; }
+            if(fileParentDirectory!=null && fileParentDirectory.equals(path)) { fileDirectory=fileParentDirectory; refreshFileEntries(); invalidate(); return; }
             File f=new File(path);
             if(f.isDirectory()){ fileDirectory=f.getAbsolutePath(); refreshFileEntries(); invalidate(); return; }
             String mime="application/octet-stream";
@@ -638,8 +675,20 @@ public class MainActivity extends Activity {
                 for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;if(x>=l&&x<=l+w/2f-32&&y>=t&&y<=t+130){if(i==4){pickWallpaper();}else{prefs.edit().putInt("wallpaper",i).apply();surface=Surface.DESKTOP;invalidate();}return true;}}
                 return true;
             }
+            if(y<55&&x>=w/2f-110&&x<=w/2f+110){
+                int target=Math.max(1,Math.min(4,1+(int)((x-(w/2f-105))/52f)));
+                switchWorkspace(target); return true;
+            }
             if(y<55&&x<180){surface=surface==Surface.OVERVIEW?Surface.DESKTOP:Surface.OVERVIEW;invalidate();return true;}
             if(y<55&&x>w-150){surface=surface==Surface.QUICK?Surface.DESKTOP:Surface.QUICK;invalidate();return true;}
+
+            if(surface==Surface.DESKTOP && y>=86 && y<=270 && x<=190){
+                int col=x<105?0:1, row=(int)((y-86)/92f), idx=row*2+col;
+                if(idx==0){showWindow("Files");return true;}
+                if(idx==1){launchTerminal();return true;}
+                if(idx==2){launchBrowser();return true;}
+                if(idx==3){surface=Surface.APPS;invalidate();return true;}
+            }
 
             if(y>h-88){
                 float dw=Math.min(590,w-28),left=(w-dw)/2f;
@@ -723,6 +772,8 @@ public class MainActivity extends Activity {
 
         void closeWindow(String name){
             if(name.equals("Terminal"))removeTerminalOverlay();
+            ArrayList<String> list=workspaceWindows.get(currentWorkspace);
+            if(list!=null) list.remove(name);
             openWindows.remove(name);windows.remove(name);
             activeWindow=null;
             if(!openWindows.isEmpty()){
@@ -757,8 +808,13 @@ public class MainActivity extends Activity {
         }
 
         void showWindow(String name){
+            ArrayList<String> list=workspaceWindows.get(currentWorkspace);
+            if(list==null){ list=new ArrayList<>(); workspaceWindows.put(currentWorkspace,list); }
+            if(!list.contains(name)) list.add(name);
             WindowState ws=windowFor(name);
             if(!openWindows.contains(name))openWindows.add(name);
+            recentItems.remove(name); recentItems.add(0,name);
+            while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
             bringToFront(name);
             surface=Surface.DESKTOP;
             if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
