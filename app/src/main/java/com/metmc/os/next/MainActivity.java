@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     static final int PICK_WALLPAPER = 9001;
     static final String ROOTFS = "/data/local/linux/rootfs";
     android.content.SharedPreferences prefs;
+    boolean sessionRestored = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -41,12 +42,18 @@ public class MainActivity extends Activity {
         desktop = new DesktopView(this);
         root.addView(desktop, new FrameLayout.LayoutParams(-1,-1));
         setContentView(root);
+        if (desktop != null) desktop.restoreSession();
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
         if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { Uri u=data.getData(); try { getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",u.toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ InputStream in=getContentResolver().openInputStream(u); desktop.customWallpaper=BitmapFactory.decodeStream(in); if(in!=null) in.close(); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } } catch(Exception e) { Toast.makeText(this,"Wallpaper load failed: "+e.getMessage(),Toast.LENGTH_SHORT).show(); } }
+    }
+
+    @Override protected void onPause() {
+        super.onPause();
+        if (desktop != null) desktop.saveSession();
     }
 
     @Override protected void onResume() {
@@ -326,7 +333,7 @@ public class MainActivity extends Activity {
         closeTerminalShell();
     }
 
-    enum Surface { DESKTOP, OVERVIEW, APPS, QUICK, SETTINGS, NOTIFICATIONS, WALLPAPER }
+    enum Surface { DESKTOP, OVERVIEW, APPS, QUICK, SETTINGS, NOTIFICATIONS, WALLPAPER, CLIPBOARD }
 
     class DesktopView extends View {
         final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -343,6 +350,9 @@ public class MainActivity extends Activity {
         int currentWorkspace=1;
         final LinkedHashMap<Integer,ArrayList<String>> workspaceWindows=new LinkedHashMap<>();
         final ArrayList<String> recentItems=new ArrayList<>();
+        final ArrayList<String> notifications=new ArrayList<>();
+        final ArrayList<String> clipboardHistory=new ArrayList<>();
+        boolean wifiOn=true, bluetoothOn=false, soundOn=true, rotationOn=false, darkMode=true;
         String desktopSearch="";
         boolean showSearch=false;
         android.content.ClipboardManager clipboardManager;
@@ -353,7 +363,21 @@ public class MainActivity extends Activity {
         String fileDirectory="/storage/emulated/0";
         String fileParentDirectory=null;
 
-        DesktopView(Context c){ super(c); setFocusable(true); clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); refreshAndroidApps(); refreshFileEntries(); }
+        DesktopView(Context c){ super(c); setFocusable(true); clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); refreshAndroidApps(); refreshFileEntries();
+            if(clipboardManager!=null) clipboardManager.addPrimaryClipChangedListener(() -> captureClipboard());
+            notifications.add("METMC OS NEXT started");
+        }
+        void captureClipboard(){
+            try{
+                if(clipboardManager==null || !clipboardManager.hasPrimaryClip()) return;
+                CharSequence cs=clipboardManager.getPrimaryClip().getItemAt(0).coerceToText(MainActivity.this);
+                if(cs==null) return;
+                String v=cs.toString().trim(); if(v.isEmpty()) return;
+                clipboardHistory.remove(v); clipboardHistory.add(0,v); while(clipboardHistory.size()>20) clipboardHistory.remove(clipboardHistory.size()-1);
+                notifications.add(0,"Clipboard updated"); while(notifications.size()>30) notifications.remove(notifications.size()-1);
+                invalidate();
+            }catch(Exception ignored){}
+        }
         void refreshFileEntries(){
             fileEntries.clear();
             File dir=new File(fileDirectory);
@@ -378,6 +402,40 @@ public class MainActivity extends Activity {
             if(appsScroll>max) appsScroll=max;
         }
 
+        void saveSession(){
+            try{
+                StringBuilder out=new StringBuilder();
+                for(String title:windows.keySet()){
+                    WindowState ws=windows.get(title); if(ws==null) continue;
+                    if(out.length()>0) out.append("|");
+                    out.append(title.replace("|","")).append(",").append(ws.l).append(",").append(ws.t).append(",").append(ws.r).append(",").append(ws.b).append(",").append(ws.minimized).append(",").append(ws.maximized);
+                }
+                prefs.edit().putInt("workspace",currentWorkspace).putString("windows",out.toString()).putString("recent",joinList(recentItems)).putString("clipboard",joinList(clipboardHistory)).apply();
+            }catch(Exception ignored){}
+        }
+        void restoreSession(){
+            if(sessionRestored) return; sessionRestored=true;
+            try{
+                currentWorkspace=Math.max(1,Math.min(4,prefs.getInt("workspace",1)));
+                restoreList(recentItems,prefs.getString("recent",""));
+                restoreList(clipboardHistory,prefs.getString("clipboard",""));
+                String saved=prefs.getString("windows","");
+                if(saved.isEmpty()) return;
+                for(String item:saved.split("\\|")){
+                    String[] a=item.split(",",-1); if(a.length<7) continue;
+                    String title=a[0]; WindowState ws=windowFor(title);
+                    ws.l=Float.parseFloat(a[1]); ws.t=Float.parseFloat(a[2]); ws.r=Float.parseFloat(a[3]); ws.b=Float.parseFloat(a[4]);
+                    ws.minimized=Boolean.parseBoolean(a[5]); ws.maximized=Boolean.parseBoolean(a[6]); clampWindow(ws);
+                    ArrayList<String> list=workspaceWindows.get(currentWorkspace); if(list==null){list=new ArrayList<>();workspaceWindows.put(currentWorkspace,list);}
+                    if(!list.contains(title)) list.add(title);
+                    if(!ws.minimized) openWindows.add(title);
+                }
+                if(!openWindows.isEmpty()) activeWindow=openWindows.get(openWindows.size()-1);
+            }catch(Exception ignored){}
+        }
+        String joinList(ArrayList<String> list){StringBuilder b=new StringBuilder();for(String v:list){if(b.length()>0)b.append("\n");b.append(v.replace("\\n"," "));}return b.toString();}
+        void restoreList(ArrayList<String> list,String value){if(value==null||value.isEmpty())return;for(String v:value.split("\\n",-1)){if(!v.isEmpty()&&!list.contains(v))list.add(v);}}
+        void addNotification(String message){notifications.add(0,message);while(notifications.size()>30)notifications.remove(notifications.size()-1);invalidate();}
         void fill(Canvas c,int color){p.setStyle(Paint.Style.FILL);p.setColor(color);p.setShader(null);}
         void stroke(Canvas c,int color,float w){p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(w);p.setColor(color);p.setShader(null);}
         void round(Canvas c,float l,float t,float rr,float b,float rad,int color){fill(c,color);c.drawRoundRect(l,t,rr,b,rad,rad,p);}
@@ -394,6 +452,7 @@ public class MainActivity extends Activity {
             else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
             else if(surface==Surface.NOTIFICATIONS) drawNotifications(c,w,h);
             else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
+            else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
             if(surface==Surface.DESKTOP) drawAllWindows(c,w,h);
         }
 
@@ -446,6 +505,7 @@ public class MainActivity extends Activity {
         void switchWorkspace(int target){
             if(target<1||target>4||target==currentWorkspace)return;
             workspaceWindows.put(currentWorkspace,new ArrayList<>(openWindows));
+            saveSession();
             currentWorkspace=target;
             openWindows.clear();
             ArrayList<String> list=workspaceWindows.get(target);
@@ -479,6 +539,7 @@ public class MainActivity extends Activity {
             drawDockIcon(c,left+8,top,"apps",surface==Surface.APPS); float x=left+62;
             for(String a:dockApps){drawDockIcon(c,x,top,a,false);x+=72;}
             drawDockIcon(c,left+dw-54,top,"quick",surface==Surface.QUICK);
+            drawDockIcon(c,left+dw-100,top,"clipboard",surface==Surface.CLIPBOARD);
             drawDockIcon(c,left+dw-8,top,"notify",surface==Surface.NOTIFICATIONS);
         }
 
@@ -530,23 +591,21 @@ public class MainActivity extends Activity {
         void drawOverview(Canvas c,int w,int h){
             overlay(c,w,h);
             bold(c,"Overview",28,92,25,Color.WHITE);
-            text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" open windows",28,116,12,0xff8f9bad);
+            text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" windows",28,116,12,0xff8f9bad);
             if(openWindows.isEmpty()){
                 round(c,28,142,w-28,214,18,0xff151c26);
                 text(c,"No open METMC windows",50,177,15,0xffdbe3ef);
             } else {
                 for(int i=0;i<openWindows.size();i++){
-                    String s=openWindows.get(i);
-                    WindowState ws=windows.get(s);
-                    float l=28+(i%2)*(w/2f-18),t=140+(i/2)*132;
-                    float r=l+w/2f-26,b=t+108;
+                    String s=openWindows.get(i); WindowState ws=windows.get(s);
+                    float l=28+(i%2)*(w/2f-18), t=140+(i/2)*142, r=l+w/2f-26, b=t+118;
                     round(c,l,t,r,b,18,0xff18212c);
-                    round(c,l+10,t+10,r-10,t+62,12,0xff0b1118);
-                    drawAppIcon(c,l+22,t+24,s);
-                    bold(c,s,l+64,t+35,15,Color.WHITE);
-                    text(c,ws!=null&&ws.minimized?"MINIMIZED":"ACTIVE WINDOW",l+64,t+55,10,0xff39ff88);
-                    text(c,"Workspace "+currentWorkspace,l+18,t+88,11,0xff8795a8);
-                    text(c,"Tap to focus",r-92,t+88,10,0xff9aa7b8);
+                    c.save(); c.clipRect(l+10,t+10,r-10,t+78);
+                    if(ws!=null) drawWindow(c,w,h,ws,s);
+                    c.restore();
+                    round(c,l+10,t+84,r-10,t+108,10,0xff0d141b);
+                    bold(c,s,l+20,t+101,12,Color.WHITE);
+                    text(c,ws!=null&&ws.minimized?"MINIMIZED":"ACTIVE",r-82,t+101,9,0xff39ff88);
                 }
             }
             if(!recentItems.isEmpty()){
@@ -557,13 +616,31 @@ public class MainActivity extends Activity {
             }
         }
 
-        void drawQuick(Canvas c,int w,int h){overlay(c,w,h);float l=w-330;round(c,l,68,w-18,h-92,22,0xff151c26);bold(c,"Quick Settings",l+24,104,21,Color.WHITE);String[] q={"Wi-Fi","Bluetooth","Sound","Rotation","Dark Mode","Lock"};for(int i=0;i<q.length;i++){int col=i%2,row=i/2;float x=l+18+col*145,y=148+row*68;round(c,x,y,x+130,y+54,15,0xff202a35);bold(c,q[i],x+14,y+23,12,Color.WHITE);text(c,"Tap to toggle",x+14,y+41,10,0xff9eacbe);}}
+        void drawQuick(Canvas c,int w,int h){
+            overlay(c,w,h); float l=w-330;
+            round(c,l,68,w-18,h-92,22,0xff151c26);
+            bold(c,"Quick Settings",l+24,104,21,Color.WHITE);
+            String[] q={"Wi-Fi","Bluetooth","Sound","Rotation","Dark Mode","Lock"};
+            boolean[] state={wifiOn,bluetoothOn,soundOn,rotationOn,darkMode,false};
+            for(int i=0;i<q.length;i++){
+                int col=i%2,row=i/2; float x=l+18+col*145,y=148+row*68;
+                round(c,x,y,x+130,y+54,15,state[i]?0xff294b39:0xff202a35);
+                bold(c,q[i],x+14,y+23,12,Color.WHITE);
+                text(c,state[i]?"ON":"OFF",x+14,y+41,10,state[i]?0xff39ff88:0xff9eacbe);
+            }
+        }
 
         void drawSettings(Canvas c,int w,int h){
-            overlay(c,w,h);bold(c,"Settings",30,91,26,Color.WHITE);text(c,"Professional METMC control center",30,116,12,0xff8f9bad);
-            String[] groups={"Appearance","Desktop","Applications","Linux integration","Security","System Update"};
-            String[] desc={"Wallpaper manager, themes and hacker styles","Panel, dock and workspace behavior","Refresh and launch installed Android apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer METMC OS build"};
-            for(int i=0;i<groups.length;i++){float y=136+i*66;round(c,28,y,w-28,y+56,15,0xff151d27);drawAppIcon(c,44,y+11,"Settings");bold(c,groups[i],92,y+23,14,Color.WHITE);text(c,desc[i],92,y+42,11,0xff8996a8);text(c,"›",w-50,y+34,23,0xff8d9bad);}
+            overlay(c,w,h); bold(c,"Settings",30,91,26,Color.WHITE);
+            text(c,"METMC OS NEXT control center",30,116,12,0xff8f9bad);
+            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session"};
+            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart"};
+            for(int i=0;i<groups.length;i++){
+                float y=136+i*57;
+                round(c,28,y,w-28,y+49,14,0xff151d27);
+                drawAppIcon(c,44,y+8,"Settings"); bold(c,92,y+21<0?0: y+21,14,Color.WHITE);
+                text(c,desc[i],92,y+39,10,0xff8996a8); text(c,"›",w-50,y+31,22,0xff8d9bad);
+            }
         }
 
         void drawWallpaperManager(Canvas c,int w,int h){
@@ -575,7 +652,34 @@ public class MainActivity extends Activity {
 
         void drawWallpaperPreview(Canvas c,float x,float y,float ww,float hh,int style){fill(c,0xff05080d);c.drawRect(x,y,x+ww,y+hh,p);stroke(c,0x8839ff88,1);for(int gx=(int)x;gx<x+ww;gx+=20)c.drawLine(gx,y,gx,y+hh,p);for(int gy=(int)y;gy<y+hh;gy+=20)c.drawLine(x,gy,x+ww,gy,p);bold(c,style==1?"NEXUS":style==2?"OPS":"METMC",x+16,y+42,20,0xff39ff88);}
 
-        void drawNotifications(Canvas c,int w,int h){overlay(c,w,h);float l=w-360;round(c,l,68,w-18,h-92,22,0xff151c26);bold(c,"Notifications",l+24,105,21,Color.WHITE);text(c,"You're all caught up",l+24,135,13,0xff9aa7b8);}
+        void drawNotifications(Canvas c,int w,int h){
+            overlay(c,w,h); float l=w-360;
+            round(c,l,68,w-18,h-92,22,0xff151c26);
+            bold(c,"Notifications",l+24,105,21,Color.WHITE);
+            if(notifications.isEmpty()) text(c,"You're all caught up",l+24,139,13,0xff9aa7b8);
+            else {
+                int n=Math.min(8,notifications.size());
+                for(int i=0;i<n;i++){
+                    float y=145+i*55; round(c,l+16,y,w-34,y+45,12,0xff202a35);
+                    text(c,notifications.get(i),l+30,y+27,11,Color.WHITE);
+                }
+            }
+            text(c,"Tap outside to close",l+24,h-112,10,0xff8795a8);
+        }
+
+        void drawClipboard(Canvas c,int w,int h){
+            overlay(c,w,h); float l=70,r=w-70;
+            round(c,l,70,r,h-92,22,0xff151c26);
+            bold(c,"Clipboard",l+24,108,22,Color.WHITE);
+            text(c,"Recent copied text",l+24,133,11,0xff8f9bad);
+            if(clipboardHistory.isEmpty()) text(c,"No clipboard history yet.",l+24,175,13,0xffaab5c4);
+            for(int i=0;i<Math.min(8,clipboardHistory.size());i++){
+                String v=clipboardHistory.get(i).replace("\n"," ");
+                if(v.length()>72)v=v.substring(0,69)+"...";
+                float y=150+i*48; round(c,l+18,y,r-18,y+38,10,0xff202a35);
+                text(c,v,l+30,y+24,10,Color.WHITE);
+            }
+        }
 
         class WindowState {
             String title;
@@ -661,7 +765,7 @@ public class MainActivity extends Activity {
         }
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
-            text(c,fileDirectory,l+28,t+128,10,0xff6f8296);
+            text(c,"PATH  "+fileDirectory,l+28,t+128,10,0xff6f8296);
             float y=t+140;
             ArrayList<String> dirs=new ArrayList<>(fileEntries.values());
             for(int i=0;i<Math.min(dirs.size(),18);i++){
@@ -738,6 +842,7 @@ public class MainActivity extends Activity {
                                     invalidate();return true;
                                 }
                             }
+                            if(x>left+dw-112 && x<=left+dw-65){surface=Surface.CLIPBOARD;invalidate();return true;}
                             if(x>left+dw-65){surface=Surface.QUICK;invalidate();return true;}
                             if(x>left+dw-12){surface=Surface.NOTIFICATIONS;invalidate();return true;}
                         }
@@ -812,6 +917,12 @@ public class MainActivity extends Activity {
 
             if(surface==Surface.QUICK){
                 float ql=w-330;
+                if(x>=ql+18&&x<=ql+148&&y>=148&&y<=202){wifiOn=!wifiOn;addNotification("Wi-Fi "+(wifiOn?"enabled":"disabled"));invalidate();return true;}
+                if(x>=ql+163&&x<=ql+293&&y>=148&&y<=202){bluetoothOn=!bluetoothOn;addNotification("Bluetooth "+(bluetoothOn?"enabled":"disabled"));invalidate();return true;}
+                if(x>=ql+18&&x<=ql+148&&y>=216&&y<=270){soundOn=!soundOn;addNotification("Sound "+(soundOn?"enabled":"muted"));invalidate();return true;}
+                if(x>=ql+163&&x<=ql+293&&y>=216&&y<=270){rotationOn=!rotationOn;addNotification("Rotation "+(rotationOn?"enabled":"locked"));invalidate();return true;}
+                if(x>=ql+18&&x<=ql+148&&y>=284&&y<=338){darkMode=!darkMode;invalidate();return true;}
+                if(x>=ql+163&&x<=ql+293&&y>=284&&y<=338){surface=Surface.DESKTOP;addNotification("Desktop locked");invalidate();return true;}
                 if(y<55 && x>w-150){
                     surface=Surface.DESKTOP;
                     invalidate();
@@ -842,6 +953,23 @@ public class MainActivity extends Activity {
                 if(idx==1){launchTerminal();return true;}
                 if(idx==2){launchBrowser();return true;}
                 if(idx==3){surface=Surface.APPS;invalidate();return true;}
+            }
+            if(surface==Surface.OVERVIEW){
+                for(int i=0;i<openWindows.size();i++){
+                    float l=28+(i%2)*(w/2f-18),t=140+(i/2)*142,r=l+w/2f-26,b=t+118;
+                    if(x>=l&&x<=r&&y>=t&&y<=b){bringToFront(openWindows.get(i));surface=Surface.DESKTOP;invalidate();syncTerminalOverlay();return true;}
+                }
+            }
+            if(surface==Surface.CLIPBOARD){
+                float l=70,r=w-70;
+                for(int i=0;i<Math.min(8,clipboardHistory.size());i++){
+                    float yy=150+i*48;
+                    if(x>=l+18&&x<=r-18&&y>=yy&&y<=yy+38){
+                        try{ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);cm.setPrimaryClip(ClipData.newPlainText("METMC",clipboardHistory.get(i)));addNotification("Clipboard item pasted");}catch(Exception ignored){}
+                        surface=Surface.DESKTOP;invalidate();return true;
+                    }
+                }
+                if(x<l||x>r||y<70||y>h-92){surface=Surface.DESKTOP;invalidate();return true;}
             }
             if(surface==Surface.APPS){
                 if(Math.abs(y-downY)>24){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));invalidate();return true;}
@@ -918,7 +1046,7 @@ public class MainActivity extends Activity {
             if(name.equals("Terminal"))removeTerminalOverlay();
             ArrayList<String> list=workspaceWindows.get(currentWorkspace);
             if(list!=null) list.remove(name);
-            openWindows.remove(name);windows.remove(name);
+            openWindows.remove(name);windows.remove(name); addNotification(name+" closed"); saveSession();
             activeWindow=null;
             if(!openWindows.isEmpty()){
                 for(int i=openWindows.size()-1;i>=0;i--){WindowState ws=windows.get(openWindows.get(i));if(ws!=null&&!ws.minimized){activeWindow=ws.title;break;}}
@@ -975,6 +1103,7 @@ public class MainActivity extends Activity {
             WindowState ws=windowFor(name);
             if(!openWindows.contains(name))openWindows.add(name);
             recentItems.remove(name); recentItems.add(0,name);
+            addNotification(name+" opened");
             while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
             bringToFront(name);
             surface=Surface.DESKTOP;
