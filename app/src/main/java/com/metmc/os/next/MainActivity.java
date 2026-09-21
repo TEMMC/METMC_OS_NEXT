@@ -633,7 +633,7 @@ public class MainActivity extends Activity {
             overlay(c,w,h);bold(c,"Applications",28,92,25,Color.WHITE);
             text(c,androidApps.size()+" launchable Android apps detected",28,116,13,0xff9daabd);
             String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
-            int total=n.length+androidApps.size();float cw=(w-92)/3f,top=138-appsScroll;
+            int total=n.length+androidApps.size();float cw=(w-112)/3f,top=138-appsScroll;
             c.save();c.clipRect(20,130,w-20,h-88);
             for(int i=0;i<total;i++){
                 int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
@@ -856,6 +856,9 @@ public class MainActivity extends Activity {
                 text(c,"Native METMC application surface",l+28,t+107,12,0xff8f9cad);
             } else if(title.equals("Settings")){
                 drawSettingsWindowContent(c,l,t,rr,bb);
+            } else if(title.equals("Applications") || title.equals("Quick Settings") || title.equals("Notifications")
+                    || title.equals("Clipboard") || title.equals("Wallpaper Manager") || title.equals("Overview")){
+                drawUtilityWindowContent(c,l,t,rr,bb,title);
             } else {
                 bold(c,title,l+28,t+82,20,Color.WHITE);
                 text(c,"Native METMC application window",l+28,t+107,12,0xff8f9cad);
@@ -881,6 +884,87 @@ public class MainActivity extends Activity {
                 text(c,"›",r-42,y+29,20,0xff8d9bad);
             }
             c.restore();
+        }
+
+        void drawApplicationsWindowContent(Canvas c,float l,float t,float r,float b){
+            String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
+            float cw=(r-l-48)/3f, top=t+62;
+            int total=n.length+androidApps.size();
+            c.save();
+            c.clipRect(l+12,t+54,r-12,b-12);
+            for(int i=0;i<total;i++){
+                int col=i%3,row=i/3;
+                float x=l+16+col*(cw+8), y=top+row*88;
+                if(y+78>b-12) break;
+                round(c,x,y,x+cw,y+78,12,0xff151d27);
+                if(i<n.length){
+                    drawAppIcon(c,x+10,y+19,n[i]);
+                    bold(c,n[i],x+60,y+31,12,Color.WHITE);
+                    text(c,appSubtitle(n[i]),x+60,y+50,8,0xff8d9aab);
+                } else {
+                    ResolveInfo ri=androidApps.get(i-n.length);
+                    String name=String.valueOf(ri.loadLabel(getPackageManager()));
+                    drawAndroidIcon(c,x+10,y+19,ri);
+                    bold(c,name,x+60,y+31,11,Color.WHITE);
+                    text(c,ri.activityInfo.packageName,x+60,y+50,7,0xff718093);
+                }
+            }
+            c.restore();
+        }
+
+        void drawUtilityWindowContent(Canvas c,float l,float t,float r,float b,String title){
+            if(title.equals("Quick Settings")){
+                String[] q={"Wi-Fi","Bluetooth","Sound","Rotation","Dark Mode","Lock"};
+                boolean[] state={wifiOn,bluetoothOn,soundOn,rotationOn,darkMode,false};
+                for(int i=0;i<q.length;i++){
+                    int col=i%2,row=i/2;
+                    float x=l+18+col*((r-l-54)/2f+12), y=t+70+row*58;
+                    float bw=(r-l-54)/2f;
+                    round(c,x,y,x+bw,y+46,12,state[i]?0xff294b39:0xff202a35);
+                    bold(c,q[i],x+12,y+20,11,Color.WHITE);
+                    text(c,state[i]?"ON":"OFF",x+12,y+36,9,state[i]?0xff39ff88:0xff9eacbe);
+                }
+            } else if(title.equals("Notifications")){
+                if(notifications.isEmpty()) text(c,"You're all caught up",l+22,t+88,12,0xff9aa7b8);
+                for(int i=0;i<Math.min(8,notifications.size());i++){
+                    float y=t+68+i*42;
+                    round(c,l+16,y,r-16,y+34,9,0xff202a35);
+                    String v=notifications.get(i);
+                    if(v.length()>48)v=v.substring(0,45)+"...";
+                    text(c,v,l+28,y+22,9,Color.WHITE);
+                }
+            } else if(title.equals("Clipboard")){
+                if(clipboardHistory.isEmpty()) text(c,"No clipboard history yet.",l+22,t+88,12,0xffaab5c4);
+                for(int i=0;i<Math.min(8,clipboardHistory.size());i++){
+                    String v=clipboardHistory.get(i).replace("\n"," ");
+                    if(v.length()>56)v=v.substring(0,53)+"...";
+                    float y=t+68+i*40;
+                    round(c,l+16,y,r-16,y+32,9,0xff202a35);
+                    text(c,v,l+28,y+21,9,Color.WHITE);
+                }
+            } else if(title.equals("Wallpaper Manager")){
+                String[] names={"Midnight Grid","Cyber Nexus","Night Ops","Deep Blue","Media Picker"};
+                float bw=(r-l-48)/2f;
+                for(int i=0;i<5;i++){
+                    int col=i%2,row=i/2;
+                    float x=l+16+col*(bw+16),y=t+68+row*96;
+                    if(y+82>b-12) break;
+                    round(c,x,y,x+bw,y+82,10,0xff10171e);
+                    drawWallpaperPreview(c,x+6,y+6,bw-12,58,i);
+                    text(c,names[i],x+10,y+75,8,Color.WHITE);
+                }
+            } else if(title.equals("Overview")){
+                text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" windows",l+20,t+76,10,0xff8f9bad);
+                for(int i=0;i<openWindows.size();i++){
+                    float x=l+16+(i%2)*((r-l-48)/2f+16), y=t+92+(i/2)*82;
+                    float bw=(r-l-48)/2f;
+                    if(y+68>b-12) break;
+                    round(c,x,y,x+bw,y+68,10,0xff18212c);
+                    drawAppIcon(c,x+8,y+14,openWindows.get(i));
+                    text(c,openWindows.get(i),x+56,y+29,10,Color.WHITE);
+                    text(c,windows.get(openWindows.get(i))!=null&&windows.get(openWindows.get(i)).minimized?"MIN":"OPEN",x+56,y+47,8,0xff39ff88);
+                }
+            }
         }
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
@@ -957,7 +1041,7 @@ public class MainActivity extends Activity {
                             if(task!=null){ bringToFront(task); invalidate(); syncTerminalOverlay(); return true; }
                         }
                         if(y>h-88){
-                            if(x>=left-8&&x<left+54){surface=surface==Surface.APPS?Surface.DESKTOP:Surface.APPS;invalidate();return true;}
+                            if(x>=left-8&&x<left+54){showWindow("Applications");return true;}
                             float pos=x-(left+62);
                             if(pos>=0&&pos<288){
                                 int idx=(int)(pos/72);
@@ -1008,7 +1092,51 @@ public class MainActivity extends Activity {
                             invalidate();
                             return true;
                         }
-                        float rr=hit.r,bb=hit.b;
+                        if("Quick Settings".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
+                            float bw=(hit.r-hit.l-54)/2f;
+                            int col=x < hit.l+18+bw+12 ? 0 : 1;
+                            int row=(int)((y-(hit.t+70))/58f);
+                            if(row>=0 && row<3){
+                                int qi=row*2+col;
+                                if(qi==0) wifiOn=!wifiOn;
+                                else if(qi==1) bluetoothOn=!bluetoothOn;
+                                else if(qi==2) soundOn=!soundOn;
+                                else if(qi==3) rotationOn=!rotationOn;
+                                else if(qi==4) darkMode=!darkMode;
+                                else if(qi==5) { lockDesktop(); return true; }
+                                addNotification(qi==5?"Desktop locked":"Quick setting changed");
+                                invalidate();
+                            }
+                            return true;
+                        }
+                        if("Clipboard".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
+                            int ci=(int)((y-(hit.t+68))/40f);
+                            if(ci>=0 && ci<Math.min(8,clipboardHistory.size())){
+                                try{
+                                    ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+                                    cm.setPrimaryClip(ClipData.newPlainText("METMC",clipboardHistory.get(ci)));
+                                    addNotification("Clipboard item copied");
+                                }catch(Exception ignored){}
+                            }
+                            return true;
+                        }
+                        if("Wallpaper Manager".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
+                            int col=x < hit.l+(hit.r-hit.l)/2f ? 0 : 1;
+                            int row=(int)((y-(hit.t+68))/96f);
+                            int wi=row*2+col;
+                            if(wi==4) pickWallpaper();
+                            else if(wi>=0 && wi<4){ prefs.edit().putInt("wallpaper",wi).apply(); invalidate(); }
+                            return true;
+                        }
+                        if("Overview".equals(hit.title) && y>hit.t+78 && y<hit.b-10){
+                            int col=x < hit.l+(hit.r-hit.l)/2f ? 0 : 1;
+                            int row=(int)((y-(hit.t+92))/82f);
+                            int oi=row*2+col;
+                            if(oi>=0 && oi<openWindows.size()){
+                                bringToFront(openWindows.get(oi)); invalidate(); syncTerminalOverlay();
+                            }
+                            return true;
+                        }
                         if(y>=hit.t&&y<=hit.t+50){
                             if(x>=rr-112&&x<rr-78){ minimizeWindow(hit.title); return true; }
                             if(x>=rr-78&&x<rr-44){ toggleMaximize(hit.title); return true; }
@@ -1104,7 +1232,7 @@ public class MainActivity extends Activity {
                 if(idx==0){showWindow("Files");return true;}
                 if(idx==1){launchTerminal();return true;}
                 if(idx==2){launchBrowser();return true;}
-                if(idx==3){surface=Surface.APPS;invalidate();return true;}
+                if(idx==3){showWindow("Applications");return true;}
             }
             if(surface==Surface.OVERVIEW){
                 for(int i=0;i<openWindows.size();i++){
@@ -1127,7 +1255,7 @@ public class MainActivity extends Activity {
                 if(Math.abs(y-downY)>24){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));invalidate();return true;}
                 String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-112)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
                 for(int i=0;i<total;i++){
-                    int col=i%3,row=i/3;float l=28+col*(cw+16),t=top+row*108;
+                    int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
                     if(x>=l-8&&x<=l+cw+8&&y>=t-8&&y<=t+104){
                         if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))showWindow("Settings");else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}
                         else launchAndroidApp(androidApps.get(i-n.length));
