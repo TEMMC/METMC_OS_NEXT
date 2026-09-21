@@ -639,7 +639,7 @@ public class MainActivity extends Activity {
             for(int i=0;i<groups.length;i++){
                 float y=136+i*57;
                 round(c,28,y,w-28,y+49,14,0xff151d27);
-                drawAppIcon(c,44,y+8,"Settings"); bold(c,92,y+21<0?0: y+21,14,Color.WHITE);
+                drawAppIcon(c,44,y+8,"Settings"); bold(c,groups[i],92,y+21,14,Color.WHITE);
                 text(c,desc[i],92,y+39,10,0xff8996a8); text(c,"›",w-50,y+31,22,0xff8d9bad);
             }
         }
