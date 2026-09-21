@@ -240,6 +240,22 @@ public class MainActivity extends Activity {
             internalTransition = true;
             Intent i = new Intent(this, BrowserActivity.class);
             i.setData(Uri.parse("https://www.google.com"));
+            if (Build.VERSION.SDK_INT >= 24) {
+                int sw = Math.max(1, desktop.getWidth());
+                int sh = Math.max(1, desktop.getHeight());
+                int bw = Math.min(920, Math.max(620, sw - 120));
+                int bh = Math.min(560, Math.max(420, sh - 150));
+                int left = Math.max(12, (sw - bw) / 2);
+                int top = Math.max(66, (sh - bh) / 2);
+                android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+                options.setLaunchBounds(new Rect(left, top,
+                        Math.min(sw - 12, left + bw),
+                        Math.min(sh - 92, top + bh)));
+                try {
+                    startActivity(i, options.toBundle());
+                    return;
+                } catch (Exception ignored) {}
+            }
             startActivity(i);
         } catch (Exception e) {
             Toast.makeText(this, "METMC Browser could not start: " + e.getMessage(), Toast.LENGTH_SHORT).show();
