@@ -1308,7 +1308,7 @@ public class MainActivity extends Activity {
                             int row=(int)(localY/116f);
                             int ai=row*3+col;
                             float cardX=hit.l+16+col*(cw+8), cardY=hit.t+62+row*116-windowScroll;
-                            if(col>=0&&col<3&&row>=0&&ai>=0&&ai<n.length+androidApps.size()
+                            if(col>=0&&col<3&&row>=0&&ai>=0&&ai<6+androidApps.size()
                                     &&x>=cardX&&x<=cardX+cw&&y>=cardY&&y<=cardY+104){
                                 String[] appNames={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
                                 if(ai<appNames.length){
