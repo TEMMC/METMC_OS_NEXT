@@ -246,6 +246,27 @@ public class MainActivity extends Activity {
 
     void launchTerminal() { desktop.showWindow("Terminal"); startTerminalShell(); }
 
+    void launchLinuxTool(String command) {
+        desktop.showWindow("Terminal");
+        startTerminalShell();
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final long deadline = SystemClock.uptimeMillis() + 5000;
+        Runnable send = new Runnable() {
+            @Override public void run() {
+                if (terminalStdin != null && terminalShell != null && terminalShell.isAlive()) {
+                    terminalInput.setText(command);
+                    sendTerminalCommand();
+                    terminalInput.requestFocus();
+                } else if (SystemClock.uptimeMillis() < deadline) {
+                    handler.postDelayed(this, 150);
+                } else {
+                    appendTerminal("\n[METMC] Linux terminal did not become ready.\n");
+                }
+            }
+        };
+        handler.post(send);
+    }
+
     void startTerminalShell() {
         if (terminalShell != null && terminalShell.isAlive()) return;
         if (terminalOutput != null) terminalOutput.setText("METMC Debian Terminal\n");
@@ -262,7 +283,9 @@ public class MainActivity extends Activity {
                         "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
                         "export HOME=/root; export TERM=xterm-256color; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
                         "export PS1='root@debian:~$ '; export PS2='> '; " +
-                        "exec chroot \"$R\" /bin/bash -l";
+                        "if test -x \"$R/usr/bin/script\"; then " +
+                        "exec chroot \"$R\" /usr/bin/script -qefc '/bin/bash -l' /dev/null; " +
+                        "else exec chroot \"$R\" /bin/bash -l; fi";
                 terminalShell = new ProcessBuilder("su","-c",script).redirectErrorStream(true).start();
                 terminalStdin = new BufferedWriter(new OutputStreamWriter(terminalShell.getOutputStream()));
                 BufferedReader br = new BufferedReader(new InputStreamReader(terminalShell.getInputStream()));
@@ -888,8 +911,9 @@ public class MainActivity extends Activity {
                 text(c,"Root filesystem and shared storage",l+28,t+107,12,0xff8f9cad);
                 drawFileWindowPreview(c,l,t,rr,bb);
             } else if(title.equals("Linux Apps")){
-                bold(c,"Linux Applications",l+28,t+82,20,Color.WHITE);
-                text(c,"Native METMC application surface",l+28,t+107,12,0xff8f9cad);
+                drawLinuxAppsWindowContent(c,l,t,rr,bb);
+            } else if(title.equals("Media")){
+                drawMediaWindowContent(c,l,t,rr,bb);
             } else if(title.equals("Settings")){
                 drawSettingsWindowContent(c,l,t,rr,bb);
             } else if(title.equals("Applications") || title.equals("Quick Settings") || title.equals("Notifications")
@@ -921,7 +945,8 @@ public class MainActivity extends Activity {
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
             if("Overview".equals(title)) return 92f+((openWindows.size()+1)/2)*82f+60f;
             if("Files".equals(title)) return 142f+Math.max(1,(fileEntries.size()+2)/3)*72f+30f;
-            if("Linux Apps".equals(title)) return 180f;
+            if("Linux Apps".equals(title)) return 360f;
+            if("Media".equals(title)) return 300f;
             return Math.max(1,ws.b-ws.t-70);
         }
         float windowScrollMax(String title,WindowState ws){ return Math.max(0,windowContentHeight(title,ws)-(ws.b-ws.t-62)); }
@@ -967,6 +992,31 @@ public class MainActivity extends Activity {
                 }
             }
             c.restore();
+        }
+
+        void drawLinuxAppsWindowContent(Canvas c,float l,float t,float r,float b){
+            bold(c,"Linux Applications",l+28,t+82,20,Color.WHITE);
+            text(c,"Run installed Debian programs directly in the METMC Terminal",l+28,t+107,11,0xff8f9cad);
+            String[] names={"Python 3","Vim","Nano","Htop","Bash","Python shell"};
+            String[] cmds={"python3","vim","nano","htop","bash","python3"};
+            String[] desc={"Interactive Python interpreter","Terminal editor","Simple terminal editor","Process monitor","Debian shell","Python interactive shell"};
+            for(int i=0;i<names.length;i++){
+                int col=i%2,row=i/2;
+                float bw=(r-l-54)/2f, x=l+18+col*(bw+18), y=t+128+row*66;
+                round(c,x,y,x+bw,y+54,12,0xff151d27);
+                drawAppIcon(c,x+10,y+7,"Linux Apps");
+                bold(c,names[i],x+60,y+22,12,Color.WHITE);
+                text(c,desc[i],x+60,y+40,9,0xff8d9aab);
+            }
+        }
+
+        void drawMediaWindowContent(Canvas c,float l,float t,float r,float b){
+            bold(c,"Media",l+28,t+82,20,Color.WHITE);
+            text(c,"Open local audio, video and image files",l+28,t+107,11,0xff8f9cad);
+            round(c,l+24,t+130,r-24,t+250,16,0xff101821);
+            drawAppIcon(c,(l+r)/2f-20,t+170,"Media");
+            bold(c,"METMC Media Player",l+40,t+275,14,Color.WHITE);
+            text(c,"Choose a file from Files to open it with an installed Android media viewer.",l+40,t+296,10,0xff8d9aab);
         }
 
         void drawUtilityWindowContent(Canvas c,float l,float t,float r,float b,String title){
@@ -1172,6 +1222,19 @@ public class MainActivity extends Activity {
                             }
                             return true;
                         }
+                        if("Linux Apps".equals(hit.title) && y>hit.t+116 && y<hit.b-12){
+                            float bw=(hit.r-hit.l-54)/2f;
+                            int col=x < hit.l+18+bw+9 ? 0 : 1;
+                            int row=(int)((y-(hit.t+128))/66f);
+                            int li=row*2+col;
+                            String[] cmds={"python3","vim","nano","htop","bash","python3"};
+                            if(li>=0 && li<cmds.length){ launchLinuxTool(cmds[li]); return true; }
+                            return true;
+                        }
+                        if("Media".equals(hit.title) && y>hit.t+125 && y<hit.b-10){
+                            showWindow("Files");
+                            return true;
+                        }
                         if("Clipboard".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
                             int ci=(int)((y-(hit.t+68)+windowScroll)/40f);
                             if(ci>=0 && ci<Math.min(8,clipboardHistory.size())){
@@ -1182,6 +1245,9 @@ public class MainActivity extends Activity {
                                 }catch(Exception ignored){}
                             }
                             return true;
+                        }
+                        if("Media".equals(hit.title) && y>hit.t+125 && y<hit.b-10){
+                            showWindow("Files"); return true;
                         }
                         if("Wallpaper Manager".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
                             int col=x < hit.l+(hit.r-hit.l)/2f ? 0 : 1;
@@ -1334,7 +1400,15 @@ public class MainActivity extends Activity {
                 for(int i=0;i<total;i++){
                     int col=i%3,row=i/3;float l=28+col*(cw+24),t=top+row*122;
                     if(x>=l-8&&x<=l+cw+8&&y>=t-8&&y<=t+104){
-                        if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))showWindow("Settings");else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}
+                        if(i<n.length){
+                            String a=n[i];
+                            if(a.equals("Terminal"))launchTerminal();
+                            else if(a.equals("Browser"))launchBrowser();
+                            else if(a.equals("Files"))showWindow("Files");
+                            else if(a.equals("Settings"))showWindow("Settings");
+                            else if(a.equals("Linux Apps"))showWindow("Linux Apps");
+                            else if(a.equals("Media"))showWindow("Media");
+                        }
                         else launchAndroidApp(androidApps.get(i-n.length));
                         invalidate();return true;
                     }
