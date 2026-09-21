@@ -94,7 +94,6 @@ jobs:
         run: |
           VERSION_NAME=$(grep -m1 "versionName" app/build.gradle | sed -E "s/.*versionName ['\"]([^'\"]+)['\"].*/\1/")
           test -n "$VERSION_NAME"
-          test -n "$VERSION_NAME"
           TAG="v$VERSION_NAME"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$TAG" release/METMC-OS-NEXT.apk --title "METMC OS NEXT $TAG" --notes "Signed METMC OS NEXT release. Permanent signing key is reused for future updates."
