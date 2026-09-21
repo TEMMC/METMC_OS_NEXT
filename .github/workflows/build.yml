@@ -92,6 +92,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="v1.0.1"
+          VERSION_NAME=$(sed -n "s/.*versionName ['\\"]\\([^'\\"]*\\)['\\"] .*/\\1/p" app/build.gradle | head -1)
+          if [ -z "$VERSION_NAME" ]; then
+            VERSION_NAME=$(sed -n "s/.*versionName ['\\"]\\([^'\\"]*\\)['\\"].*/\\1/p" app/build.gradle | head -1)
+          fi
+          test -n "$VERSION_NAME"
+          TAG="v$VERSION_NAME"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" release/METMC-OS-NEXT.apk             --title "METMC OS NEXT v1.0.1"             --notes "Signed METMC OS NEXT release. Future updates use the same permanent signing key."
+          gh release create "$TAG" release/METMC-OS-NEXT.apk --title "METMC OS NEXT $TAG" --notes "Signed METMC OS NEXT release. Permanent signing key is reused for future updates."
