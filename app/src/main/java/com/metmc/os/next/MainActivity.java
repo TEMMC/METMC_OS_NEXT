@@ -30,6 +30,8 @@ public class MainActivity extends Activity {
     boolean suppressTerminalBridge=false;
     static final int PICK_WALLPAPER = 9001;
     static final String ROOTFS = "/data/local/linux/rootfs";
+    static final String DEFAULT_SEARCH = "https://search.yahoo.com/search?p=";
+    static final String DEFAULT_HOME = "https://search.yahoo.com/";
     android.content.SharedPreferences prefs;
     boolean sessionRestored = false;
     boolean internalTransition = false;
@@ -173,7 +175,8 @@ public class MainActivity extends Activity {
             // Request a separate task/instance so several Android apps can remain open.
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     | Intent.FLAG_ACTIVITY_MULTIPLE_TASK
-                    | Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                    | Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                    | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
             if (Build.VERSION.SDK_INT >= 24) {
                 int sw = Math.max(1, desktop.getWidth());
                 int sh = Math.max(1, desktop.getHeight());
@@ -239,7 +242,8 @@ public class MainActivity extends Activity {
             desktop.showWindow("Browser");
             internalTransition = true;
             Intent i = new Intent(this, BrowserActivity.class);
-            i.setData(Uri.parse("https://www.google.com"));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
+            i.setData(Uri.parse(DEFAULT_HOME));
             if (Build.VERSION.SDK_INT >= 24) {
                 int sw = Math.max(1, desktop.getWidth());
                 int sh = Math.max(1, desktop.getHeight());
@@ -409,7 +413,7 @@ public class MainActivity extends Activity {
         scroll.setScrollbarFadingEnabled(false);
         scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-2));
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
-        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=155; sp.bottomMargin=128;
+        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=108; sp.bottomMargin=92;
         root.addView(scroll, sp);
 
         terminalPrompt = new TextView(this);
@@ -421,7 +425,7 @@ public class MainActivity extends Activity {
         terminalPrompt.setPadding(12,0,0,0);
         terminalPrompt.setBackgroundColor(0xff0d1418);
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(112,48);
-        pp.leftMargin=32; pp.gravity=Gravity.TOP; pp.topMargin=0;
+        pp.leftMargin=32; pp.gravity=Gravity.TOP; pp.topMargin=54;
         root.addView(terminalPrompt,pp);
 
         terminalInput = new EditText(this);
@@ -471,7 +475,7 @@ public class MainActivity extends Activity {
             return false;
         });
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
-        ip.leftMargin=148; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=0;
+        ip.leftMargin=148; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=54;
         root.addView(terminalInput,ip);
         terminalInput.requestFocus();
     }
@@ -1629,21 +1633,21 @@ public class MainActivity extends Activity {
             ViewParent terminalParent=terminalOutput.getParent();
             FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
             sp.width=Math.max(1,(int)(ws.r-ws.l-24));
-            sp.height=Math.max(1,(int)(ws.b-ws.t-118));
+            sp.height=Math.max(1,(int)(ws.b-ws.t-166));
             sp.leftMargin=(int)ws.l+12;
-            sp.topMargin=(int)ws.t+54;
+            sp.topMargin=(int)ws.t+108;
             sp.rightMargin=0; sp.bottomMargin=0;
             ((View)terminalParent).setLayoutParams(sp);
 
             FrameLayout.LayoutParams pp=(FrameLayout.LayoutParams)terminalPrompt.getLayoutParams();
             pp.width=126; pp.height=50;
-            pp.leftMargin=(int)ws.l+12; pp.topMargin=(int)ws.b-60;
+            pp.leftMargin=(int)ws.l+12; pp.topMargin=(int)ws.t+54;
             pp.rightMargin=0; pp.bottomMargin=0; pp.gravity=Gravity.TOP|Gravity.LEFT;
             terminalPrompt.setLayoutParams(pp);
 
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
             ip.width=Math.max(1,(int)(ws.r-ws.l-150)); ip.height=50;
-            ip.leftMargin=(int)ws.l+138; ip.topMargin=(int)ws.b-60;
+            ip.leftMargin=(int)ws.l+138; ip.topMargin=(int)ws.t+54;
             ip.rightMargin=0; ip.bottomMargin=0; ip.gravity=Gravity.TOP|Gravity.LEFT;
             terminalInput.setLayoutParams(ip);
         }
