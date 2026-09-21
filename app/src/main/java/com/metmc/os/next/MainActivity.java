@@ -523,7 +523,9 @@ public class MainActivity extends Activity {
                     String title=a[0]; WindowState ws=windowFor(title);
                     ws.l=Float.parseFloat(a[1]); ws.t=Float.parseFloat(a[2]); ws.r=Float.parseFloat(a[3]); ws.b=Float.parseFloat(a[4]);
                     ws.minimized=Boolean.parseBoolean(a[5]); ws.maximized=Boolean.parseBoolean(a[6]); clampWindow(ws);
-                    ArrayList<String> list=workspaceWindows.get(currentWorkspace); if(list==null){list=new ArrayList<>();workspaceWindows.put(currentWorkspace,list);}
+                    if("Applications".equals(name)) refreshAndroidApps();
+            windowScroll=0;
+            ArrayList<String> list=workspaceWindows.get(currentWorkspace); if(list==null){list=new ArrayList<>();workspaceWindows.put(currentWorkspace,list);}
                     if(!list.contains(title)) list.add(title);
                     if(!ws.minimized) openWindows.add(title);
                 }
@@ -1119,7 +1121,7 @@ public class MainActivity extends Activity {
                     }
                     WindowState files=windows.get("Files");
                     WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
-                        float contentTop=files.t+142, contentBottom=files.b-12;
+                        float contentTop=files.t+142-windowScroll, contentBottom=files.b-12;
                         float available=Math.max(1,files.r-files.l-48);
                         int columns=Math.max(2,Math.min(4,(int)(available/150f)));
                         float gap=10f,tileW=(available-gap*(columns-1))/columns,step=72f,tileH=62f;
@@ -1143,7 +1145,7 @@ public class MainActivity extends Activity {
                             scrollingWindow=true; scrollingWindowTitle=hit.title;
                         }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
-                            int setting=(int)((y-(hit.t+62))/52f);
+                            int setting=(int)((y-(hit.t+62)+windowScroll)/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
                             else if(setting==2) { refreshAndroidApps(); showWindow("Applications"); }
                             else if(setting==3) showWindow("Linux Apps");
@@ -1172,7 +1174,7 @@ public class MainActivity extends Activity {
                             return true;
                         }
                         if("Clipboard".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
-                            int ci=(int)((y-(hit.t+68))/40f);
+                            int ci=(int)((y-(hit.t+68)+windowScroll)/40f);
                             if(ci>=0 && ci<Math.min(8,clipboardHistory.size())){
                                 try{
                                     ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
