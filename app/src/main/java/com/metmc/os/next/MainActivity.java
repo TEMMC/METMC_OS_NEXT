@@ -48,7 +48,23 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (desktop != null) { desktop.refreshAndroidApps(); desktop.invalidate(); }
+        if (desktop != null) { desktop.refreshAndroidApps(); desktop.refreshFileEntries(); desktop.invalidate(); }
+    }
+
+    @Override public void onBackPressed() {
+        if (desktop == null) { super.onBackPressed(); return; }
+        if (desktop.surface != DesktopView.Surface.DESKTOP) {
+            desktop.surface = DesktopView.Surface.DESKTOP;
+            desktop.invalidate();
+            desktop.syncTerminalOverlay();
+            return;
+        }
+        if (desktop.activeWindow != null) {
+            String name = desktop.activeWindow;
+            desktop.minimizeWindow(name);
+            return;
+        }
+        super.onBackPressed();
     }
 
     ArrayList<ResolveInfo> getAndroidApps() {
@@ -238,14 +254,23 @@ public class MainActivity extends Activity {
         float downX,downY,appsScroll=0;
         float appsContentHeight=0;
         int accent=0xff39ff88;
+        String fileDirectory="/storage/emulated/0";
+        String fileParentDirectory=null;
 
         DesktopView(Context c){ super(c); setFocusable(true); refreshAndroidApps(); refreshFileEntries(); }
         void refreshFileEntries(){
             fileEntries.clear();
-            File[] roots={new File("/data/local/linux/rootfs/root"),new File("/storage/emulated/0"),new File("/data/local/linux/rootfs/usr/share/applications")};
-            for(File rootDir:roots) if(rootDir.isDirectory()){
-                File[] fs=rootDir.listFiles();
-                if(fs!=null) for(File f:fs) fileEntries.putIfAbsent(f.getAbsolutePath(),f.getAbsolutePath());
+            File dir=new File(fileDirectory);
+            if(!dir.isDirectory()) { fileDirectory="/storage/emulated/0"; dir=new File(fileDirectory); }
+            File parent=dir.getParentFile();
+            if(parent!=null) { fileParentDirectory=parent.getAbsolutePath(); fileEntries.put("..",parent.getAbsolutePath()); }
+            File[] fs=dir.listFiles();
+            if(fs!=null){
+                Arrays.sort(fs,(a,b)->{
+                    if(a.isDirectory()!=b.isDirectory()) return a.isDirectory()?-1:1;
+                    return a.getName().compareToIgnoreCase(b.getName());
+                });
+                for(File f:fs) fileEntries.put(f.getAbsolutePath(),f.getAbsolutePath());
             }
         }
 
@@ -429,10 +454,13 @@ public class MainActivity extends Activity {
         void drawAllWindows(Canvas c,int w,int h){
             if(openWindows.isEmpty()) return;
             overlay(c,w,h);
+            c.save();
+            c.clipRect(0,54,w,h-82);
             for(String title:new ArrayList<>(openWindows)){
                 WindowState ws=windows.get(title);
                 if(ws!=null && !ws.minimized) drawWindow(c,w,h,ws,title);
             }
+            c.restore();
             drawWindowTaskbar(c,w,h);
         }
 
@@ -477,13 +505,15 @@ public class MainActivity extends Activity {
         }
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
-            float y=t+132;
+            text(c,fileDirectory,l+28,t+128,10,0xff6f8296);
+            float y=t+140;
             ArrayList<String> dirs=new ArrayList<>(fileEntries.values());
             for(int i=0;i<Math.min(dirs.size(),18);i++){
                 float x=l+24+(i%3)*140, yy=y+(i/3)*68;
                 round(c,x,yy,x+124,yy+54,10,0xff151f29);
                 File f=new File(dirs.get(i)); drawAppIcon(c,x+8,yy+8,f.isDirectory()?"Files":"Browser");
                 String name=f.getName().isEmpty()?f.getAbsolutePath():f.getName();
+                if(name.equals(new File(fileDirectory).getName()) && dirs.get(i).equals(fileParentDirectory)) name="..";
                 if(name.length()>16) name=name.substring(0,15)+"…";
                 text(c,name,x+40,yy+24,10,0xffd6dfeb);
                 text(c,f.isDirectory()?"FOLDER":"FILE",x+40,yy+40,8,0xff7f9b8b);
@@ -491,15 +521,17 @@ public class MainActivity extends Activity {
         }
 
         void openFileEntry(String path){
+            if("..".equals(path) && fileParentDirectory!=null) { fileDirectory=fileParentDirectory; refreshFileEntries(); invalidate(); return; }
             File f=new File(path);
-            if(f.isDirectory()){ Toast.makeText(MainActivity.this,"Opened folder: "+f.getName(),Toast.LENGTH_SHORT).show(); return; }
+            if(f.isDirectory()){ fileDirectory=f.getAbsolutePath(); refreshFileEntries(); invalidate(); return; }
             String mime="application/octet-stream";
             String n=f.getName().toLowerCase(Locale.US);
             if(n.endsWith(".pdf")) mime="application/pdf";
             else if(n.endsWith(".png")||n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".webp")) mime="image/*";
-            else if(n.endsWith(".txt")||n.endsWith(".log")||n.endsWith(".json")||n.endsWith(".xml")) mime="text/plain";
+            else if(n.endsWith(".txt")||n.endsWith(".log")||n.endsWith(".json")||n.endsWith(".xml")||n.endsWith(".md")||n.endsWith(".csv")) mime="text/plain";
             try{
-                Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(Uri.parse("file://"+path),mime); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Uri uri=FileProvider.getUriForFile(MainActivity.this,"com.metmc.os.next.fileprovider",f);
+                Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(uri,mime); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 MainActivity.this.startActivity(i);
             }catch(Exception e){ Toast.makeText(MainActivity.this,"No app can open "+f.getName(),Toast.LENGTH_SHORT).show(); }
         }
@@ -528,8 +560,8 @@ public class MainActivity extends Activity {
                 downX=x;downY=y;
                 if(surface==Surface.DESKTOP){
                     WindowState files=windows.get("Files");
-                    if(files!=null&&!files.minimized&&x>=files.l&&x<=files.r&&y>=files.t+125&&y<=files.b){
-                        int col=(int)((x-(files.l+24))/140f), row=(int)((y-(files.t+132))/68f);
+                    if(files!=null&&!files.minimized&&x>=files.l&&x<=files.r&&y>=files.t+116&&y<=files.b){
+                        int col=(int)((x-(files.l+24))/140f), row=(int)((y-(files.t+140))/68f);
                         int idx=row*3+col;
                         ArrayList<String> entries=new ArrayList<>(fileEntries.values());
                         if(col>=0&&col<3&&row>=0&&idx>=0&&idx<Math.min(entries.size(),18)){
@@ -578,7 +610,28 @@ public class MainActivity extends Activity {
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_CANCEL||e.getAction()==MotionEvent.ACTION_UP){
-                if(draggingWindow!=null){draggingWindow=null;dragging=false;resizing=false;syncTerminalOverlay();if(e.getAction()==MotionEvent.ACTION_UP&&Math.abs(x-downX)>8)return true;}
+                if(draggingWindow!=null){
+                    String moved=draggingWindow;
+                    if(e.getAction()==MotionEvent.ACTION_UP && dragging){
+                        WindowState ws=windows.get(moved);
+                        if(ws!=null&&!ws.maximized){
+                            if(x<=18) snapWindow(moved,0);
+                            else if(x>=w-18) snapWindow(moved,1);
+                            else if(y<=66) toggleMaximize(moved);
+                        }
+                    }
+                    draggingWindow=null;dragging=false;resizing=false;syncTerminalOverlay();
+                    if(e.getAction()==MotionEvent.ACTION_UP&&Math.abs(x-downX)>8)return true;
+                }
+            }
+
+            if(surface==Surface.QUICK){
+                float ql=w-330;
+                if(!(x>=ql&&x<=w-18&&y>=68&&y<=h-92)){
+                    surface=Surface.DESKTOP;
+                    invalidate();
+                }
+                return true;
             }
 
             if(surface==Surface.WALLPAPER){
@@ -586,7 +639,7 @@ public class MainActivity extends Activity {
                 return true;
             }
             if(y<55&&x<180){surface=surface==Surface.OVERVIEW?Surface.DESKTOP:Surface.OVERVIEW;invalidate();return true;}
-            if(y<55&&x>w-150){surface=Surface.QUICK;invalidate();return true;}
+            if(y<55&&x>w-150){surface=surface==Surface.QUICK?Surface.DESKTOP:Surface.QUICK;invalidate();return true;}
 
             if(y>h-88){
                 float dw=Math.min(590,w-28),left=(w-dw)/2f;
@@ -642,10 +695,29 @@ public class MainActivity extends Activity {
             WindowState ws=windowFor(name);
             if(ws.maximized){
                 ws.l=ws.restoreL;ws.t=ws.restoreT;ws.r=ws.restoreR;ws.b=ws.restoreB;ws.maximized=false;
+                clampWindow(ws);
             }else{
                 ws.restoreL=ws.l;ws.restoreT=ws.t;ws.restoreR=ws.r;ws.restoreB=ws.b;
-                ws.l=10;ws.t=58;ws.r=getWidth()-10;ws.b=getHeight()-92;ws.maximized=true;
+                ws.l=10;ws.t=58;ws.r=Math.max(ws.l+MIN_W,getWidth()-10);ws.b=Math.max(ws.t+MIN_H,getHeight()-92);ws.maximized=true;
             }
+            bringToFront(name);invalidate();syncTerminalOverlay();
+        }
+
+        void clampWindow(WindowState ws){
+            float top=58,bottom=Math.max(top+MIN_H,getHeight()-92),left=10,right=Math.max(left+MIN_W,getWidth()-10);
+            float ww=Math.min(ws.r-ws.l,right-left),hh=Math.min(ws.b-ws.t,bottom-top);
+            ws.l=Math.max(left,Math.min(ws.l,right-ww)); ws.t=Math.max(top,Math.min(ws.t,bottom-hh));
+            ws.r=ws.l+ww; ws.b=ws.t+hh;
+        }
+
+        void snapWindow(String name,int side){
+            WindowState ws=windowFor(name);
+            if(ws.maximized) return;
+            ws.restoreL=ws.l;ws.restoreT=ws.t;ws.restoreR=ws.r;ws.restoreB=ws.b;
+            float top=58,bottom=getHeight()-92,mid=getWidth()/2f;
+            if(side==0){ws.l=10;ws.t=top;ws.r=mid-5;ws.b=bottom;}
+            else {ws.l=mid+5;ws.t=top;ws.r=getWidth()-10;ws.b=bottom;}
+            ws.maximized=false;
             bringToFront(name);invalidate();syncTerminalOverlay();
         }
 
@@ -673,14 +745,15 @@ public class MainActivity extends Activity {
             if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
             ViewParent terminalParent=terminalOutput.getParent();
             FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
-            sp.width=getWidth(); sp.height=getHeight();
-            sp.leftMargin=(int)ws.l+12;sp.rightMargin=(int)(getWidth()-ws.r)+12;sp.topMargin=(int)ws.t+108;sp.bottomMargin=(int)(getHeight()-ws.b)+54;
+            sp.width=Math.max(1,(int)(ws.r-ws.l-24)); sp.height=Math.max(1,(int)(ws.b-ws.t-166));
+            sp.leftMargin=(int)ws.l+12; sp.rightMargin=0; sp.topMargin=(int)ws.t+108; sp.bottomMargin=0;
             ((View)terminalParent).setLayoutParams(sp);
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
-            ip.leftMargin=(int)ws.l+12;ip.rightMargin=Math.max(86,(int)(getWidth()-ws.r)+84);ip.bottomMargin=Math.max(52,(int)(getHeight()-ws.b)+12);
-            ip.gravity=Gravity.TOP;ip.topMargin=(int)ws.b-64;terminalInput.setLayoutParams(ip);
+            ip.width=Math.max(1,(int)(ws.r-ws.l-24)); ip.height=48;
+            ip.leftMargin=(int)ws.l+12; ip.rightMargin=0; ip.gravity=Gravity.TOP; ip.topMargin=(int)ws.b-60; ip.bottomMargin=0; terminalInput.setLayoutParams(ip);
             FrameLayout.LayoutParams tp=(FrameLayout.LayoutParams)terminalToolbar.getLayoutParams();
-            tp.leftMargin=(int)ws.r-252;tp.topMargin=(int)ws.t+54;tp.rightMargin=0;tp.gravity=Gravity.TOP|Gravity.LEFT;terminalToolbar.setLayoutParams(tp);
+            tp.width=Math.min(210,Math.max(150,(int)(ws.r-ws.l-24))); tp.height=48;
+            tp.leftMargin=(int)ws.r-tp.width-12; tp.topMargin=(int)ws.t+54; tp.rightMargin=0; tp.bottomMargin=0; tp.gravity=Gravity.TOP|Gravity.LEFT; terminalToolbar.setLayoutParams(tp);
         }
 
         void showWindow(String name){
