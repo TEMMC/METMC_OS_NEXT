@@ -453,7 +453,7 @@ public class MainActivity extends Activity {
         void refreshAndroidApps(){
             androidApps.clear(); androidApps.addAll(getAndroidApps());
             float rows=(float)Math.ceil((6+androidApps.size())/3.0);
-            appsContentHeight=rows*102f;
+            appsContentHeight=rows*108f;
             float max=Math.max(0,appsContentHeight-(getHeight()-270));
             if(appsScroll>max) appsScroll=max;
         }
@@ -644,7 +644,7 @@ public class MainActivity extends Activity {
         String appSubtitle(String s){if(s.equals("Files"))return"File manager";if(s.equals("Terminal"))return"Native Debian terminal";if(s.equals("Browser"))return"Web browser";if(s.equals("Settings"))return"System controls";if(s.equals("Media"))return"Media player";return"Linux integration";}
 
         void drawAndroidIcon(Canvas c,float x,float y,ResolveInfo r){
-            Drawable d=r.loadIcon(getPackageManager()); if(d!=null){d.setBounds((int)x,(int)y,(int)x+34,(int)y+34); d.draw(c);} else drawAppIcon(c,x,y,"Android");
+            Drawable d=r.loadIcon(getPackageManager()); if(d!=null){d.setBounds((int)x,(int)y,(int)x+40,(int)y+40); d.draw(c);} else drawAppIcon(c,x,y,"Android");
         }
 
         void drawAppIcon(Canvas c,float x,float y,String s){
@@ -1076,7 +1076,7 @@ public class MainActivity extends Activity {
                 for(int i=0;i<total;i++){
                     int col=i%3,row=i/3;float l=28+col*(cw+16),t=top+row*108;
                     if(x>=l-8&&x<=l+cw+8&&y>=t-8&&y<=t+94){
-                        if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))openSecurity();else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}
+                        if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))surface=Surface.SETTINGS;else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}
                         else launchAndroidApp(androidApps.get(i-n.length));
                         invalidate();return true;
                     }
