@@ -597,15 +597,18 @@ public class MainActivity extends Activity {
                 downX=x;downY=y;
                 if(surface==Surface.DESKTOP){
                     WindowState files=windows.get("Files");
-                    if(files!=null&&!files.minimized&&x>=files.l&&x<=files.r&&y>=files.t+116&&y<=files.b){
-                        int col=(int)((x-(files.l+24))/140f), row=(int)((y-(files.t+140))/68f);
-                        int idx=row*3+col;
-                        ArrayList<String> entries=new ArrayList<>(fileEntries.values());
-                        if(col>=0&&col<3&&row>=0&&idx>=0&&idx<Math.min(entries.size(),18)){
-                            openFileEntry(entries.get(idx)); return true;
+                    WindowState hit=windowAt(x,y);
+                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
+                        float contentTop=files.t+140, contentBottom=Math.min(files.b-12,contentTop+408);
+                        if(x>=files.l+24&&x<=files.r-24&&y>=contentTop&&y<=contentBottom){
+                            int col=(int)((x-(files.l+24))/140f), row=(int)((y-contentTop)/68f);
+                            int idx=row*3+col;
+                            ArrayList<String> entries=new ArrayList<>(fileEntries.values());
+                            if(col>=0&&col<3&&row>=0&&idx>=0&&idx<Math.min(entries.size(),18)){
+                                openFileEntry(entries.get(idx)); return true;
+                            }
                         }
                     }
-                    WindowState hit=windowAt(x,y);
                     if(hit!=null){
                         bringToFront(hit.title);
                         if(hit.maximized) return true;
@@ -664,6 +667,11 @@ public class MainActivity extends Activity {
 
             if(surface==Surface.QUICK){
                 float ql=w-330;
+                if(y<55 && x>w-150){
+                    surface=Surface.DESKTOP;
+                    invalidate();
+                    return true;
+                }
                 if(!(x>=ql&&x<=w-18&&y>=68&&y<=h-92)){
                     surface=Surface.DESKTOP;
                     invalidate();
@@ -799,15 +807,26 @@ public class MainActivity extends Activity {
             sp.width=Math.max(1,(int)(ws.r-ws.l-24)); sp.height=Math.max(1,(int)(ws.b-ws.t-166));
             sp.leftMargin=(int)ws.l+12; sp.rightMargin=0; sp.topMargin=(int)ws.t+108; sp.bottomMargin=0;
             ((View)terminalParent).setLayoutParams(sp);
+            if(terminalParent instanceof ViewGroup){
+                ((ViewGroup)terminalParent).setClipChildren(true);
+                ((ViewGroup)terminalParent).setClipToPadding(true);
+            }
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
             ip.width=Math.max(1,(int)(ws.r-ws.l-24)); ip.height=48;
-            ip.leftMargin=(int)ws.l+12; ip.rightMargin=0; ip.gravity=Gravity.TOP; ip.topMargin=(int)ws.b-60; ip.bottomMargin=0; terminalInput.setLayoutParams(ip);
+            ip.leftMargin=(int)ws.l+12; ip.rightMargin=0; ip.gravity=Gravity.TOP; ip.topMargin=Math.max((int)ws.t+108,(int)ws.b-60); ip.bottomMargin=0; terminalInput.setLayoutParams(ip);
             FrameLayout.LayoutParams tp=(FrameLayout.LayoutParams)terminalToolbar.getLayoutParams();
             tp.width=Math.min(210,Math.max(150,(int)(ws.r-ws.l-24))); tp.height=48;
-            tp.leftMargin=(int)ws.r-tp.width-12; tp.topMargin=(int)ws.t+54; tp.rightMargin=0; tp.bottomMargin=0; tp.gravity=Gravity.TOP|Gravity.LEFT; terminalToolbar.setLayoutParams(tp);
+            tp.leftMargin=Math.max((int)ws.l+12,(int)ws.r-tp.width-12); tp.topMargin=(int)ws.t+54; tp.rightMargin=0; tp.bottomMargin=0; tp.gravity=Gravity.TOP|Gravity.LEFT; terminalToolbar.setLayoutParams(tp);
         }
 
         void showWindow(String name){
+            if("Files".equals(name) && android.os.Build.VERSION.SDK_INT>=30 && !android.os.Environment.isExternalStorageManager()){
+                try{
+                    Intent i=new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    i.setData(Uri.parse("package:"+getPackageName()));
+                    startActivity(i);
+                }catch(Exception ignored){}
+            }
             ArrayList<String> list=workspaceWindows.get(currentWorkspace);
             if(list==null){ list=new ArrayList<>(); workspaceWindows.put(currentWorkspace,list); }
             if(!list.contains(name)) list.add(name);
