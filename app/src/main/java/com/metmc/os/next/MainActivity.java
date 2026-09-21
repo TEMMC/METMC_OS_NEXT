@@ -532,6 +532,8 @@ public class MainActivity extends Activity {
         boolean scrollingSurface=false;
         boolean scrollingWindow=false;
         String scrollingWindowTitle=null;
+        long lastWindowTapTime=0;
+        String lastWindowTapTitle=null;
         int accent=0xff39ff88;
         String fileDirectory="/storage/emulated/0";
         String fileParentDirectory=null;
@@ -1209,7 +1211,17 @@ public class MainActivity extends Activity {
             else if(n.endsWith(".txt")||n.endsWith(".log")||n.endsWith(".json")||n.endsWith(".xml")||n.endsWith(".md")||n.endsWith(".csv")) mime="text/plain";
             try{
                 Uri uri=FileProvider.getUriForFile(MainActivity.this,"com.metmc.os.next.fileprovider",f);
-                Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(uri,mime); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                Intent i=new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(uri,mime);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                if(Build.VERSION.SDK_INT>=24){
+                    int sw=Math.max(1,desktop.getWidth()), sh=Math.max(1,desktop.getHeight());
+                    int fw=Math.min(760,Math.max(500,sw-140)), fh=Math.min(520,Math.max(360,sh-170));
+                    int fl=Math.max(12,(sw-fw)/2), ft=Math.max(66,(sh-fh)/2);
+                    ActivityOptions o=ActivityOptions.makeBasic();
+                    o.setLaunchBounds(new Rect(fl,ft,Math.min(sw-12,fl+fw),Math.min(sh-92,ft+fh)));
+                    try{ MainActivity.this.startActivity(i,o.toBundle()); return; }catch(Exception ignored){}
+                }
                 MainActivity.this.startActivity(i);
             }catch(Exception e){ Toast.makeText(MainActivity.this,"No app can open "+f.getName(),Toast.LENGTH_SHORT).show(); }
         }
@@ -1245,7 +1257,7 @@ public class MainActivity extends Activity {
                         float taskY=h-126;
                         if(y>=taskY && y<=taskY+38){
                             String task=windowTaskAt(x,y);
-                            if(task!=null){ bringToFront(task); invalidate(); syncTerminalOverlay(); return true; }
+                            if(task!=null){ if(task.equals(activeWindow)) minimizeWindow(task); else bringToFront(task); invalidate(); syncTerminalOverlay(); return true; }
                         }
                         if(y>h-88){
                             if(x>=left-8&&x<left+54){showWindow("Applications");return true;}
@@ -1394,6 +1406,14 @@ public class MainActivity extends Activity {
                             if(x>=rr-112&&x<rr-78){ minimizeWindow(hit.title); return true; }
                             if(x>=rr-78&&x<rr-44){ toggleMaximize(hit.title); return true; }
                             if(x>=rr-46&&x<=rr){ closeWindow(hit.title); return true; }
+                            long now=e.getEventTime();
+                            if(hit.title.equals(lastWindowTapTitle) && now-lastWindowTapTime<350){
+                                lastWindowTapTime=0;
+                                toggleMaximize(hit.title);
+                                return true;
+                            }
+                            lastWindowTapTitle=hit.title;
+                            lastWindowTapTime=now;
                             draggingWindow=hit.title; dragging=true;
                             dragOffsetX=x-hit.l; dragOffsetY=y-hit.t;
                             return true;
