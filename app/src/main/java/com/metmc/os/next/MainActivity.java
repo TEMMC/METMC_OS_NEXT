@@ -6,6 +6,7 @@ import android.content.pm.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
 import android.net.Uri;
+import androidx.core.content.FileProvider;
 import android.os.*;
 import android.view.*;
 import android.widget.*;
@@ -170,7 +171,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xff080c0d);
         scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-1));
-        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,0);
+        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
         sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=205; sp.bottomMargin=130;
         root.addView(scroll, sp);
 
@@ -196,6 +197,7 @@ public class MainActivity extends Activity {
         TextView status=new TextView(this); status.setText("● LIVE  •  DEBIAN"); status.setTextColor(0xff39ff88); status.setTextSize(11); status.setGravity(Gravity.CENTER_VERTICAL); terminalToolbar.addView(status,new LinearLayout.LayoutParams(150,48));
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(252,52); tp.gravity=Gravity.TOP|Gravity.RIGHT; tp.rightMargin=32; tp.topMargin=155; root.addView(terminalToolbar,tp);
 
+        appendTerminal("\nMETMC Terminal • Debian GNU/Linux • native PTY\n");
         terminalInput.requestFocus();
     }
 
@@ -671,6 +673,7 @@ public class MainActivity extends Activity {
             if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
             ViewParent terminalParent=terminalOutput.getParent();
             FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
+            sp.width=getWidth(); sp.height=getHeight();
             sp.leftMargin=(int)ws.l+12;sp.rightMargin=(int)(getWidth()-ws.r)+12;sp.topMargin=(int)ws.t+108;sp.bottomMargin=(int)(getHeight()-ws.b)+54;
             ((View)terminalParent).setLayoutParams(sp);
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
