@@ -3,6 +3,7 @@ package com.metmc.os.next;
 import android.app.*;
 import android.app.role.RoleManager;
 import android.content.*;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
