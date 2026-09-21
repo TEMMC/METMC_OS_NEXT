@@ -234,8 +234,13 @@ public class MainActivity extends Activity {
         Surface surface=Surface.DESKTOP;
         String activeWindow=null;
         final ArrayList<String> openWindows=new ArrayList<>();
+        final LinkedHashMap<String,WindowState> windows=new LinkedHashMap<>();
         final String[] dockApps={"Files","Terminal","Browser","Settings"};
         final ArrayList<ResolveInfo> androidApps=new ArrayList<>();
+        String draggingWindow=null;
+        boolean dragging=false,resizing=false;
+        float dragOffsetX,dragOffsetY;
+        final float MIN_W=280f, MIN_H=190f;
         float downX,downY,appsScroll=0;
         float appsContentHeight=0;
         int accent=0xff39ff88;
@@ -388,21 +393,165 @@ public class MainActivity extends Activity {
 
         void drawNotifications(Canvas c,int w,int h){overlay(c,w,h);float l=w-360;round(c,l,68,w-18,h-92,22,0xff151c26);bold(c,"Notifications",l+24,105,21,Color.WHITE);text(c,"You're all caught up",l+24,135,13,0xff9aa7b8);}
 
-        void drawWindow(Canvas c,int w,int h,String title){
-            overlay(c,w,h);float l=18,t=64,rr=w-18,bb=h-88;round(c,l,t,rr,bb,20,0xff0d141b);stroke(c,0x663e5064,1);c.drawRoundRect(l,t,rr,bb,20,20,p);round(c,l,t,rr,t+54,20,0xff18222e);c.drawRect(l,t+28,rr,t+54,p);bold(c,title,l+22,t+34,15,Color.WHITE);
-            round(c,rr-78,t+15,rr-46,t+39,8,0xff263342);text(c,"×",rr-68,t+33,15,0xffd7e0eb);
-            if(title.equals("Terminal")){bold(c,"Debian shell",l+28,t+88,18,0xff39ff88);text(c,"root@debian • chroot • native METMC window",l+28,t+112,11,0xff7f9b8b);}
-            else if(title.equals("Files")){bold(c,"METMC File Manager",l+28,t+90,20,Color.WHITE);text(c,"Root filesystem and shared storage",l+28,t+115,12,0xff8f9cad);}
-            else if(title.equals("Linux Apps")){bold(c,"Linux Applications",l+28,t+90,20,Color.WHITE);text(c,"Native METMC application surface",l+28,t+115,12,0xff8f9cad);}
-            else {bold(c,title,l+28,t+90,20,Color.WHITE);text(c,"Native METMC application window",l+28,t+115,12,0xff8f9cad);}
+        class WindowState {
+            String title;
+            float l,t,r,b;
+            boolean minimized=false,maximized=false;
+            float restoreL,restoreT,restoreR,restoreB;
+            WindowState(String title,float l,float t,float r,float b){
+                this.title=title;this.l=l;this.t=t;this.r=r;this.b=b;
+                restoreL=l;restoreT=t;restoreR=r;restoreB=b;
+            }
+        }
+
+        WindowState windowFor(String title){
+            WindowState ws=windows.get(title);
+            if(ws==null){
+                float ww=Math.min(620,getWidth()-36), hh=Math.min(430,getHeight()-150);
+                float l=Math.max(18,(getWidth()-ww)/2f), t=72;
+                ws=new WindowState(title,l,t,l+ww,t+hh);
+                windows.put(title,ws);
+            }
+            return ws;
+        }
+
+        void bringToFront(String title){
+            if(!openWindows.contains(title)) openWindows.add(title);
+            openWindows.remove(title);
+            openWindows.add(title);
+            activeWindow=title;
+            WindowState ws=windowFor(title);
+            ws.minimized=false;
+        }
+
+        void drawAllWindows(Canvas c,int w,int h){
+            if(openWindows.isEmpty()) return;
+            overlay(c,w,h);
+            for(String title:new ArrayList<>(openWindows)){
+                WindowState ws=windows.get(title);
+                if(ws!=null && !ws.minimized) drawWindow(c,w,h,ws,title);
+            }
+            drawWindowTaskbar(c,w,h);
+        }
+
+        void drawWindow(Canvas c,int w,int h,WindowState ws,String title){
+            float l=ws.l,t=ws.t,rr=ws.r,bb=ws.b;
+            int border=title.equals(activeWindow)?0xff39ff88:0x66465a6d;
+            round(c,l,t,rr,bb,18,0xff0b1118);
+            stroke(c,border,title.equals(activeWindow)?2f:1f);
+            c.drawRoundRect(l,t,rr,bb,18,18,p);
+            round(c,l,t,rr,t+50,18,title.equals(activeWindow)?0xff192630:0xff141d26);
+            c.drawRect(l,t+26,rr,t+50,p);
+
+            drawAppIcon(c,l+14,t+9,title);
+            bold(c,title,l+52,t+32,14,Color.WHITE);
+
+            // Minimize / maximize / close controls.
+            round(c,rr-108,t+12,rr-80,t+38,7,0xff263342);
+            text(c,"—",rr-101,t+30,13,0xffd7e0eb);
+            round(c,rr-76,t+12,rr-48,t+38,7,0xff263342);
+            text(c,ws.maximized?"❐":"□",rr-69,t+30,11,0xffd7e0eb);
+            round(c,rr-44,t+12,rr-16,t+38,7, title.equals(activeWindow)?0xff6b2630:0xff263342);
+            text(c,"×",rr-37,t+30,14,0xffffffff);
+
+            if(title.equals("Terminal")){
+                bold(c,"Debian shell",l+28,t+82,18,0xff39ff88);
+                text(c,"root@debian • chroot • native METMC window",l+28,t+106,11,0xff7f9b8b);
+            } else if(title.equals("Files")){
+                bold(c,"METMC File Manager",l+28,t+82,20,Color.WHITE);
+                text(c,"Root filesystem and shared storage",l+28,t+107,12,0xff8f9cad);
+                drawFileWindowPreview(c,l,t,rr,bb);
+            } else if(title.equals("Linux Apps")){
+                bold(c,"Linux Applications",l+28,t+82,20,Color.WHITE);
+                text(c,"Native METMC application surface",l+28,t+107,12,0xff8f9cad);
+            } else {
+                bold(c,title,l+28,t+82,20,Color.WHITE);
+                text(c,"Native METMC application window",l+28,t+107,12,0xff8f9cad);
+            }
+
+            // Resize grip.
+            stroke(c,0xff536476,1.2f);
+            for(int i=0;i<3;i++){c.drawLine(rr-18-i*6,bb-5,rr-5,bb-18-i*6,p);}
+        }
+
+        void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
+            float y=t+132;
+            String[] dirs={"Home","root","storage","data","etc","usr"};
+            for(int i=0;i<dirs.length;i++){
+                float x=l+24+(i%3)*110, yy=y+(i/3)*72;
+                round(c,x,yy,x+94,yy+56,12,0xff151f29);
+                drawAppIcon(c,x+10,yy+10,"Files");
+                text(c,dirs[i],x+48,yy+32,11,0xffd6dfeb);
+            }
+        }
+
+        void drawWindowTaskbar(Canvas c,int w,int h){
+            if(openWindows.isEmpty()) return;
+            float y=h-126, x=24;
+            for(String title:new ArrayList<>(openWindows)){
+                WindowState ws=windows.get(title);
+                if(ws==null) continue;
+                float bw=Math.min(150,Math.max(92,p.measureText(title)+58));
+                if(x+bw>w-24) break;
+                round(c,x,y,x+bw,y+38,12,title.equals(activeWindow)?0xff284534:0xff1b2530);
+                drawAppIcon(c,x+7,y+5,title);
+                text(c,title,x+48,y+24,11,Color.WHITE);
+                if(ws.minimized){text(c,"•",x+bw-17,y+23,12,0xff8b98a9);}
+                x+=bw+8;
+            }
         }
 
         void drawAppIconSimple(Canvas c,float x,float y){drawAppIcon(c,x,y,"Android");}
 
         @Override public boolean onTouchEvent(MotionEvent e){
             float x=e.getX(),y=e.getY();int h=getHeight(),w=getWidth();
-            if(e.getAction()==MotionEvent.ACTION_DOWN){downX=x;downY=y;return true;}
-            if(e.getAction()!=MotionEvent.ACTION_UP)return true;
+            if(e.getAction()==MotionEvent.ACTION_DOWN){
+                downX=x;downY=y;
+                if(surface==Surface.DESKTOP){
+                    WindowState hit=windowAt(x,y);
+                    if(hit!=null){
+                        bringToFront(hit.title);
+                        if(hit.maximized) return true;
+                        float rr=hit.r,bb=hit.b;
+                        if(y>=hit.t&&y<=hit.t+50){
+                            if(x>=rr-112&&x<rr-78){ minimizeWindow(hit.title); return true; }
+                            if(x>=rr-78&&x<rr-44){ toggleMaximize(hit.title); return true; }
+                            if(x>=rr-46&&x<=rr){ closeWindow(hit.title); return true; }
+                            draggingWindow=hit.title; dragging=true;
+                            dragOffsetX=x-hit.l; dragOffsetY=y-hit.t;
+                            return true;
+                        }
+                        if(x>=rr-28&&y>=bb-28){ draggingWindow=hit.title; resizing=true; return true; }
+                        return true;
+                    }
+                    String task=windowTaskAt(x,y);
+                    if(task!=null){ bringToFront(task); invalidate(); syncTerminalOverlay(); return true; }
+                }
+                return true;
+            }
+            if(e.getAction()==MotionEvent.ACTION_MOVE){
+                if(surface==Surface.DESKTOP&&draggingWindow!=null){
+                    WindowState ws=windows.get(draggingWindow);
+                    if(ws!=null&&!ws.maximized){
+                        if(dragging){
+                            float ww=ws.r-ws.l,hh=ws.b-ws.t;
+                            ws.l=Math.max(10,Math.min(w-ww-10,x-dragOffsetX));
+                            ws.t=Math.max(56,Math.min(h-hh-92,y-dragOffsetY));
+                            ws.r=ws.l+ww;ws.b=ws.t+hh;
+                        } else if(resizing){
+                            ws.r=Math.max(ws.l+MIN_W,Math.min(w-10,x));
+                            ws.b=Math.max(ws.t+MIN_H,Math.min(h-92,y));
+                        }
+                        invalidate();syncTerminalOverlay();
+                    }
+                    return true;
+                }
+                if(surface==Surface.APPS&&Math.abs(y-downY)>8){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));downY=y;invalidate();return true;}
+                return true;
+            }
+            if(e.getAction()==MotionEvent.ACTION_CANCEL||e.getAction()==MotionEvent.ACTION_UP){
+                if(draggingWindow!=null){draggingWindow=null;dragging=false;resizing=false;syncTerminalOverlay();if(e.getAction()==MotionEvent.ACTION_UP&&Math.abs(x-downX)>8)return true;}
+            }
 
             if(surface==Surface.WALLPAPER){
                 for(int i=0;i<5;i++){float l=28+(i%2)*(w/2f-20),t=140+(i/2)*150;if(x>=l&&x<=l+w/2f-32&&y>=t&&y<=t+130){if(i==4){pickWallpaper();}else{prefs.edit().putInt("wallpaper",i).apply();surface=Surface.DESKTOP;invalidate();}return true;}}
@@ -430,10 +579,87 @@ public class MainActivity extends Activity {
                 for(int i=0;i<6;i++){float yy=136+i*66;if(y>=yy&&y<=yy+56){if(i==0)surface=Surface.WALLPAPER;else if(i==1)surface=Surface.QUICK;else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)showWindow("Security");else new Updater(MainActivity.this).check();invalidate();return true;}}
             }
 
-            if(activeWindow!=null&&surface==Surface.DESKTOP&&y>=64&&x>w-105){if(activeWindow.equals("Terminal"))removeTerminalOverlay();activeWindow=null;invalidate();return true;}
             return true;
         }
 
-        void showWindow(String name){if(!openWindows.contains(name))openWindows.add(name);activeWindow=name;surface=Surface.DESKTOP;if(name.equals("Terminal"))postDelayed(()->buildTerminalOverlay(),80);invalidate();}
+        WindowState windowAt(float x,float y){
+            for(int i=openWindows.size()-1;i>=0;i--){
+                WindowState ws=windows.get(openWindows.get(i));
+                if(ws!=null&&!ws.minimized&&x>=ws.l&&x<=ws.r&&y>=ws.t&&y<=ws.b)return ws;
+            }
+            return null;
+        }
+
+        String windowTaskAt(float x,float y){
+            float tx=24,ty=getHeight()-126;
+            for(String title:new ArrayList<>(openWindows)){
+                WindowState ws=windows.get(title);
+                if(ws==null)continue;
+                float bw=Math.min(150,Math.max(92,title.length()*8f+58));
+                if(x>=tx&&x<=tx+bw&&y>=ty&&y<=ty+38)return title;
+                tx+=bw+8;
+            }
+            return null;
+        }
+
+        void minimizeWindow(String name){
+            WindowState ws=windowFor(name);ws.minimized=true;
+            if(name.equals("Terminal"))hideTerminalOverlay();
+            activeWindow=null;
+            for(int i=openWindows.size()-1;i>=0;i--){WindowState n=windows.get(openWindows.get(i));if(n!=null&&!n.minimized){activeWindow=n.title;break;}}
+            invalidate();syncTerminalOverlay();
+        }
+
+        void toggleMaximize(String name){
+            WindowState ws=windowFor(name);
+            if(ws.maximized){
+                ws.l=ws.restoreL;ws.t=ws.restoreT;ws.r=ws.restoreR;ws.b=ws.restoreB;ws.maximized=false;
+            }else{
+                ws.restoreL=ws.l;ws.restoreT=ws.t;ws.restoreR=ws.r;ws.restoreB=ws.b;
+                ws.l=10;ws.t=58;ws.r=getWidth()-10;ws.b=getHeight()-92;ws.maximized=true;
+            }
+            bringToFront(name);invalidate();syncTerminalOverlay();
+        }
+
+        void closeWindow(String name){
+            if(name.equals("Terminal"))removeTerminalOverlay();
+            openWindows.remove(name);windows.remove(name);
+            activeWindow=null;
+            if(!openWindows.isEmpty()){
+                for(int i=openWindows.size()-1;i>=0;i--){WindowState ws=windows.get(openWindows.get(i));if(ws!=null&&!ws.minimized){activeWindow=ws.title;break;}}
+            }
+            invalidate();syncTerminalOverlay();
+        }
+
+        void hideTerminalOverlay(){
+            if(terminalToolbar!=null)terminalToolbar.setVisibility(View.GONE);
+            if(terminalInput!=null)terminalInput.setVisibility(View.GONE);
+            if(terminalOutput!=null&&terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.GONE);
+        }
+
+        void syncTerminalOverlay(){
+            WindowState ws=windows.get("Terminal");
+            if(ws==null||ws.minimized||!"Terminal".equals(activeWindow)||surface!=Surface.DESKTOP){hideTerminalOverlay();return;}
+            if(terminalToolbar==null||terminalInput==null||terminalOutput==null)return;
+            terminalToolbar.setVisibility(View.VISIBLE);terminalInput.setVisibility(View.VISIBLE);
+            if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
+            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)terminalOutput.getParent().getLayoutParams();
+            sp.leftMargin=(int)ws.l+12;sp.rightMargin=(int)(getWidth()-ws.r)+12;sp.topMargin=(int)ws.t+108;sp.bottomMargin=(int)(getHeight()-ws.b)+54;
+            terminalOutput.getParent().setLayoutParams(sp);
+            FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
+            ip.leftMargin=(int)ws.l+12;ip.rightMargin=Math.max(86,(int)(getWidth()-ws.r)+84);ip.bottomMargin=Math.max(52,(int)(getHeight()-ws.b)+12);
+            ip.gravity=Gravity.TOP;ip.topMargin=(int)ws.b-64;terminalInput.setLayoutParams(ip);
+            FrameLayout.LayoutParams tp=(FrameLayout.LayoutParams)terminalToolbar.getLayoutParams();
+            tp.leftMargin=(int)ws.r-252;tp.topMargin=(int)ws.t+54;tp.rightMargin=0;tp.gravity=Gravity.TOP|Gravity.LEFT;terminalToolbar.setLayoutParams(tp);
+        }
+
+        void showWindow(String name){
+            WindowState ws=windowFor(name);
+            if(!openWindows.contains(name))openWindows.add(name);
+            bringToFront(name);
+            surface=Surface.DESKTOP;
+            if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
+            invalidate();
+        }
     }
 }
