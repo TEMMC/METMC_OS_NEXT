@@ -309,6 +309,10 @@ public class MainActivity extends Activity {
             ViewParent p=terminalInput.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalInput);
             terminalInput=null;
         }
+        if (terminalPrompt != null) {
+            ViewParent p=terminalPrompt.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalPrompt);
+            terminalPrompt=null;
+        }
         if (terminalOutput != null) {
             ViewParent p=terminalOutput.getParent();
             if(p instanceof ViewGroup) {
@@ -382,8 +386,9 @@ public class MainActivity extends Activity {
 
         @Override protected void onDraw(Canvas c){
             int w=getWidth(),h=getHeight();
-            drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h); drawDock(c,w,h);
-            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);            if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
+            drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h);
+            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);
+            if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
             else if(surface==Surface.APPS) drawApps(c,w,h);
             else if(surface==Surface.QUICK) drawQuick(c,w,h);
             else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
@@ -710,6 +715,33 @@ public class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;
                 if(surface==Surface.DESKTOP){
+                    // Shell chrome is a higher interaction layer than application windows.
+                    // Prevent an application window from stealing dock/task-switcher taps.
+                    if(y>h-136){
+                        float dw=Math.min(590,w-28),left=(w-dw)/2f;
+                        float taskY=h-126;
+                        if(y>=taskY && y<=taskY+38){
+                            String task=windowTaskAt(x,y);
+                            if(task!=null){ bringToFront(task); invalidate(); syncTerminalOverlay(); return true; }
+                        }
+                        if(y>h-88){
+                            if(x>=left-8&&x<left+54){surface=surface==Surface.APPS?Surface.DESKTOP:Surface.APPS;invalidate();return true;}
+                            float pos=x-(left+62);
+                            if(pos>=0&&pos<288){
+                                int idx=(int)(pos/72);
+                                if(idx<4){
+                                    String a=dockApps[idx];
+                                    if(a.equals("Terminal"))launchTerminal();
+                                    else if(a.equals("Browser"))launchBrowser();
+                                    else if(a.equals("Files"))showWindow("Files");
+                                    else surface=Surface.SETTINGS;
+                                    invalidate();return true;
+                                }
+                            }
+                            if(x>left+dw-65){surface=Surface.QUICK;invalidate();return true;}
+                            if(x>left+dw-12){surface=Surface.NOTIFICATIONS;invalidate();return true;}
+                        }
+                    }
                     WindowState files=windows.get("Files");
                     WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
                         float contentTop=files.t+140, contentBottom=Math.min(files.b-12,contentTop+408);
@@ -811,15 +843,6 @@ public class MainActivity extends Activity {
                 if(idx==2){launchBrowser();return true;}
                 if(idx==3){surface=Surface.APPS;invalidate();return true;}
             }
-            if(y>h-88){
-                float dw=Math.min(590,w-28),left=(w-dw)/2f;
-                if(x>=left-8&&x<left+54){surface=surface==Surface.APPS?Surface.DESKTOP:Surface.APPS;invalidate();return true;}
-                float pos=x-(left+62);
-                if(pos>=0&&pos<288){int idx=(int)(pos/72);if(idx<4){String a=dockApps[idx];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else surface=Surface.SETTINGS;invalidate();return true;}}
-                if(x>left+dw-65){surface=Surface.QUICK;invalidate();return true;}
-                if(x>left+dw-12){surface=Surface.NOTIFICATIONS;invalidate();return true;}
-            }
-
             if(surface==Surface.APPS){
                 if(Math.abs(y-downY)>24){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));invalidate();return true;}
                 String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-84)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
