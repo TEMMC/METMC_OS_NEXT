@@ -108,14 +108,14 @@ public class MainActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (desktop == null) { super.onBackPressed(); return; }
+        if (SecurityStore.enabled(this)) {
+            lockDesktop();
+            return;
+        }
         if (desktop.surface != Surface.DESKTOP) {
             desktop.surface = Surface.DESKTOP;
             desktop.invalidate();
             desktop.syncTerminalOverlay();
-            return;
-        }
-        if (SecurityStore.enabled(this)) {
-            lockDesktop();
             return;
         }
         if (desktop.activeWindow != null) {
