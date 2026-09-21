@@ -60,6 +60,7 @@ final class SecurityStore {
                 .putString(MODE, mode)
                 .putString(SALT, encodedSalt)
                 .putString(HASH, hash)
+                .putBoolean(AUTO_LOCK, true)
                 .putBoolean(LOCKED, false)
                 .apply();
     }
