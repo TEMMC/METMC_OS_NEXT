@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     static final String ROOTFS = "/data/local/linux/rootfs";
     android.content.SharedPreferences prefs;
     boolean sessionRestored = false;
+    boolean internalTransition = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -43,6 +44,9 @@ public class MainActivity extends Activity {
         root.addView(desktop, new FrameLayout.LayoutParams(-1,-1));
         setContentView(root);
         if (desktop != null) desktop.restoreSession();
+        if (SecurityStore.locked(this)) {
+            startActivity(new Intent(this, LockScreenActivity.class));
+        }
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
     }
 
@@ -58,7 +62,48 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        internalTransition = false;
+        if (SecurityStore.locked(this)) {
+            startActivity(new Intent(this, LockScreenActivity.class));
+            return;
+        }
         if (desktop != null) { desktop.refreshAndroidApps(); desktop.refreshFileEntries(); desktop.invalidate(); }
+    }
+
+    @Override public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        if (!internalTransition && SecurityStore.enabled(this) && SecurityStore.autoLock(this)) {
+            SecurityStore.lock(this);
+        }
+    }
+
+    void lockDesktop() {
+        if (!SecurityStore.enabled(this)) {
+            Toast.makeText(this, "Set a PIN, password, or pattern in Security first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        SecurityStore.lock(this);
+        internalTransition = true;
+        startActivity(new Intent(this, LockScreenActivity.class));
+    }
+
+    void openSecurity() {
+        internalTransition = true;
+        startActivity(new Intent(this, SecurityActivity.class));
+    }
+
+    void requestDefaultBrowser() {
+        if (Build.VERSION.SDK_INT < 29) return;
+        try {
+            android.app.role.RoleManager rm = getSystemService(android.app.role.RoleManager.class);
+            if (rm != null && rm.isRoleAvailable(android.app.role.RoleManager.ROLE_BROWSER)
+                    && !rm.isRoleHeld(android.app.role.RoleManager.ROLE_BROWSER)) {
+                internalTransition = true;
+                startActivityForResult(rm.createRequestRoleIntent(android.app.role.RoleManager.ROLE_BROWSER), 7012);
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Browser role is unavailable on this device.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override public void onBackPressed() {
@@ -67,6 +112,10 @@ public class MainActivity extends Activity {
             desktop.surface = Surface.DESKTOP;
             desktop.invalidate();
             desktop.syncTerminalOverlay();
+            return;
+        }
+        if (SecurityStore.enabled(this)) {
+            lockDesktop();
             return;
         }
         if (desktop.activeWindow != null) {
@@ -173,8 +222,15 @@ public class MainActivity extends Activity {
     }
 
     void launchBrowser() {
-        try { desktop.showWindow("Browser"); startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))); }
-        catch (Exception e) { desktop.showWindow("Browser"); }
+        try {
+            desktop.showWindow("Browser");
+            internalTransition = true;
+            Intent i = new Intent(this, BrowserActivity.class);
+            i.setData(Uri.parse("https://www.google.com"));
+            startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(this, "METMC Browser could not start: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     void launchTerminal() { desktop.showWindow("Terminal"); startTerminalShell(); }
@@ -453,7 +509,7 @@ public class MainActivity extends Activity {
             else if(surface==Surface.NOTIFICATIONS) drawNotifications(c,w,h);
             else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
             else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
-            if(surface==Surface.DESKTOP) drawAllWindows(c,w,h);
+            if(surface==Surface.DESKTOP) { drawAllWindows(c,w,h); drawDock(c,w,h); }
         }
 
         Bitmap customWallpaper;
@@ -561,17 +617,28 @@ public class MainActivity extends Activity {
             overlay(c,w,h);bold(c,"Applications",28,92,25,Color.WHITE);
             text(c,androidApps.size()+" launchable Android apps detected",28,116,13,0xff9daabd);
             String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
-            int total=n.length+androidApps.size();float cw=(w-84)/3f,top=138-appsScroll;
+            int total=n.length+androidApps.size();float cw=(w-92)/3f,top=138-appsScroll;
             c.save();c.clipRect(20,130,w-20,h-88);
             for(int i=0;i<total;i++){
-                int col=i%3,row=i/3;float l=28+col*(cw+14),t=top+row*102;
-                if(t>h-82||t+86<130)continue;
-                round(c,l,t,l+cw,t+86,18,0xff171f2a);
-                if(i<n.length){drawAppIcon(c,l+28,t+18,n[i]);bold(c,n[i],l+62,t+33,14,Color.WHITE);text(c,appSubtitle(n[i]),l+62,t+55,11,0xff8d9aab);}
-                else {ResolveInfo r=androidApps.get(i-n.length);String s=String.valueOf(r.loadLabel(getPackageManager()));drawAndroidIcon(c,l+28,t+18,r);bold(c,s,l+62,t+33,14,Color.WHITE);text(c,r.activityInfo.packageName,l+62,t+55,9,0xff718093);}
+                int col=i%3,row=i/3;float l=28+col*(cw+16),t=top+row*108;
+                if(t>h-90||t+94<130)continue;
+                round(c,l,t,l+cw,t+94,16,0xff171f2a);
+                if(i<n.length){
+                    drawAppIcon(c,l+18,t+24,n[i]);
+                    bold(c,n[i],l+70,t+35,14,Color.WHITE);
+                    text(c,appSubtitle(n[i]),l+70,t+57,10,0xff8d9aab);
+                } else {
+                    ResolveInfo r=androidApps.get(i-n.length);
+                    String name=String.valueOf(r.loadLabel(getPackageManager()));
+                    drawAndroidIcon(c,l+18,t+24,r);
+                    bold(c,name,l+70,t+35,14,Color.WHITE);
+                    text(c,r.activityInfo.packageName,l+70,t+57,9,0xff718093);
+                }
             }
             c.restore();
-            round(c,28,h-76,w-28,h-34,14,0xff151d27);text(c,"⌕",47,h-48,20,0xffaeb9c8);text(c,"Installed Android + METMC applications",77,h-50,13,0xff98a5b6);
+            round(c,28,h-76,w-28,h-34,14,0xff151d27);
+            text(c,"⌕",47,h-48,20,0xffaeb9c8);
+            text(c,"Installed Android + METMC applications",77,h-50,13,0xff98a5b6);
         }
 
         String appSubtitle(String s){if(s.equals("Files"))return"File manager";if(s.equals("Terminal"))return"Native Debian terminal";if(s.equals("Browser"))return"Web browser";if(s.equals("Settings"))return"System controls";if(s.equals("Media"))return"Media player";return"Linux integration";}
@@ -581,12 +648,28 @@ public class MainActivity extends Activity {
         }
 
         void drawAppIcon(Canvas c,float x,float y,String s){
-            round(c,x,y,x+34,y+34,10,0xff26364b);stroke(c,0xffdce6f3,1.8f);
-            if(s.equals("Files"))round(c,x+8,y+10,x+26,y+25,3,0xffdce6f3);
-            else if(s.equals("Terminal")){c.drawRect(x+7,y+8,x+27,y+26,p);c.drawLine(x+11,y+14,x+16,y+18,p);}
-            else if(s.equals("Browser")){c.drawCircle(x+17,y+17,10,p);c.drawLine(x+7,y+17,x+27,y+17,p);}
-            else if(s.equals("Settings")){c.drawCircle(x+17,y+17,7,p);c.drawCircle(x+17,y+17,2,p);}
-            else c.drawRect(x+8,y+9,x+26,y+25,p);
+            round(c,x,y,x+40,y+40,11,0xff182432);
+            stroke(c,0xff71879d,1.5f);
+            float cx=x+20,cy=y+20;
+            if(s.equals("Files")){
+                fill(c,0xffd9e7f5);
+                Path folder=new Path(); folder.moveTo(x+8,y+13);folder.lineTo(x+17,y+13);folder.lineTo(x+20,y+16);folder.lineTo(x+32,y+16);folder.lineTo(x+32,y+30);folder.lineTo(x+8,y+30);folder.close();c.drawPath(folder,p);
+            } else if(s.equals("Terminal")){
+                stroke(c,0xff39ff88,2.2f);c.drawRect(x+7,y+8,x+33,y+32,p);
+                c.drawLine(x+12,y+16,x+18,y+20,p);c.drawLine(x+18,y+20,x+12,y+24,p);c.drawLine(x+21,y+25,x+28,y+25,p);
+            } else if(s.equals("Browser")){
+                stroke(c,0xff62b7ff,2);c.drawCircle(cx,cy,13,p);c.drawLine(x+7,y+20,x+33,y+20,p);
+                c.drawOval(x+14,y+7,x+26,y+33,p);
+            } else if(s.equals("Settings")){
+                stroke(c,0xffd9e7f5,2.5f);c.drawCircle(cx,cy,9,p);fill(c,0xff39ff88);c.drawCircle(cx,cy,3,p);
+                for(int i=0;i<8;i++){double a=i*Math.PI/4;float x1=cx+(float)Math.cos(a)*11,y1=cy+(float)Math.sin(a)*11;float x2=cx+(float)Math.cos(a)*14,y2=cy+(float)Math.sin(a)*14;c.drawLine(x1,y1,x2,y2,p);}
+            } else if(s.equals("Media")){
+                fill(c,0xff7c8cff);c.drawCircle(cx,cy,13,p);fill(c,0xff0d141c);Path tri=new Path();tri.moveTo(x+17,y+13);tri.lineTo(x+17,y+27);tri.lineTo(x+29,y+20);tri.close();c.drawPath(tri,p);
+            } else if(s.equals("Linux Apps")){
+                stroke(c,0xffffc857,2);c.drawCircle(cx,cy,13,p);text(c,"L",x+15,y+26,16,0xffffc857);
+            } else {
+                fill(c,0xff53677d);c.drawCircle(cx,cy,12,p);text(c,"A",x+14,y+26,14,Color.WHITE);
+            }
         }
 
         void drawOverview(Canvas c,int w,int h){
@@ -766,19 +849,28 @@ public class MainActivity extends Activity {
         }
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
+            c.save();
+            c.clipRect(l+18,t+118,r-18,b-12);
             text(c,"PATH  "+fileDirectory,l+28,t+128,10,0xff6f8296);
-            float y=t+140;
+            float contentTop=t+142;
+            float available=Math.max(1,r-l-48);
+            int columns=Math.max(2,Math.min(4,(int)(available/150f)));
+            float gap=10f, tileW=(available-gap*(columns-1))/columns;
+            float tileH=62f, step=72f;
             ArrayList<String> dirs=new ArrayList<>(fileEntries.values());
-            for(int i=0;i<Math.min(dirs.size(),18);i++){
-                float x=l+24+(i%3)*140, yy=y+(i/3)*68;
-                round(c,x,yy,x+124,yy+54,10,0xff151f29);
-                File f=new File(dirs.get(i)); drawAppIcon(c,x+8,yy+8,f.isDirectory()?"Files":"Browser");
+            int visible=Math.min(dirs.size(),Math.max(1,(int)((b-contentTop-12)/step))*columns);
+            for(int i=0;i<visible;i++){
+                int col=i%columns,row=i/columns;
+                float x=l+24+col*(tileW+gap), yy=contentTop+row*step;
+                round(c,x,yy,x+tileW,yy+tileH,12,0xff151f29);
+                File f=new File(dirs.get(i)); drawAppIcon(c,x+10,yy+11,f.isDirectory()?"Files":"Browser");
                 String name=f.getName().isEmpty()?f.getAbsolutePath():f.getName();
-                if(name.equals(new File(fileDirectory).getName()) && dirs.get(i).equals(fileParentDirectory)) name="..";
-                if(name.length()>16) name=name.substring(0,15)+"…";
-                text(c,name,x+40,yy+24,10,0xffd6dfeb);
-                text(c,f.isDirectory()?"FOLDER":"FILE",x+40,yy+40,8,0xff7f9b8b);
+                if(dirs.get(i).equals(fileParentDirectory)) name="..";
+                if(name.length()>18) name=name.substring(0,17)+"…";
+                text(c,name,x+58,yy+27,10,0xffd6dfeb);
+                text(c,f.isDirectory()?"FOLDER":"FILE",x+58,yy+44,8,0xff7f9b8b);
             }
+            c.restore();
         }
 
         void openFileEntry(String path){
@@ -851,12 +943,17 @@ public class MainActivity extends Activity {
                     }
                     WindowState files=windows.get("Files");
                     WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
-                        float contentTop=files.t+140, contentBottom=Math.min(files.b-12,contentTop+408);
+                        float contentTop=files.t+142, contentBottom=files.b-12;
+                        float available=Math.max(1,files.r-files.l-48);
+                        int columns=Math.max(2,Math.min(4,(int)(available/150f)));
+                        float gap=10f,tileW=(available-gap*(columns-1))/columns,step=72f,tileH=62f;
                         if(x>=files.l+24&&x<=files.r-24&&y>=contentTop&&y<=contentBottom){
-                            int col=(int)((x-(files.l+24))/140f), row=(int)((y-contentTop)/68f);
-                            int idx=row*3+col;
+                            int col=(int)((x-(files.l+24))/(tileW+gap)), row=(int)((y-contentTop)/step);
+                            float tileX=files.l+24+col*(tileW+gap),tileY=contentTop+row*step;
+                            int idx=row*columns+col;
                             ArrayList<String> entries=new ArrayList<>(fileEntries.values());
-                            if(col>=0&&col<3&&row>=0&&idx>=0&&idx<Math.min(entries.size(),18)){
+                            if(col>=0&&col<columns&&row>=0&&idx>=0&&idx<entries.size()
+                                    &&x>=tileX&&x<=tileX+tileW&&y>=tileY&&y<=tileY+tileH){
                                 openFileEntry(entries.get(idx)); return true;
                             }
                         }
@@ -924,7 +1021,7 @@ public class MainActivity extends Activity {
                 if(x>=ql+18&&x<=ql+148&&y>=216&&y<=270){soundOn=!soundOn;addNotification("Sound "+(soundOn?"enabled":"muted"));invalidate();return true;}
                 if(x>=ql+163&&x<=ql+293&&y>=216&&y<=270){rotationOn=!rotationOn;addNotification("Rotation "+(rotationOn?"enabled":"locked"));invalidate();return true;}
                 if(x>=ql+18&&x<=ql+148&&y>=284&&y<=338){darkMode=!darkMode;invalidate();return true;}
-                if(x>=ql+163&&x<=ql+293&&y>=284&&y<=338){surface=Surface.DESKTOP;addNotification("Desktop locked");invalidate();return true;}
+                if(x>=ql+163&&x<=ql+293&&y>=284&&y<=338){lockDesktop();return true;}
                 if(y<55 && x>w-150){
                     surface=Surface.DESKTOP;
                     invalidate();
@@ -975,12 +1072,19 @@ public class MainActivity extends Activity {
             }
             if(surface==Surface.APPS){
                 if(Math.abs(y-downY)>24){appsScroll+=downY-y;float max=Math.max(0,appsContentHeight-(h-270));appsScroll=Math.max(0,Math.min(max,appsScroll));invalidate();return true;}
-                String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-84)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
-                for(int i=0;i<total;i++){int col=i%3,row=i/3;float l=28+col*(cw+14),t=top+row*102;if(x>=l&&x<=l+cw&&y>=t&&y<=t+86){if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))surface=Surface.SETTINGS;else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}else launchAndroidApp(androidApps.get(i-n.length));invalidate();return true;}}
+                String[] n={"Files","Terminal","Browser","Settings","Media","Linux Apps"};float cw=(w-92)/3f,top=138-appsScroll;int total=n.length+androidApps.size();
+                for(int i=0;i<total;i++){
+                    int col=i%3,row=i/3;float l=28+col*(cw+16),t=top+row*108;
+                    if(x>=l-8&&x<=l+cw+8&&y>=t-8&&y<=t+94){
+                        if(i<n.length){String a=n[i];if(a.equals("Terminal"))launchTerminal();else if(a.equals("Browser"))launchBrowser();else if(a.equals("Files"))showWindow("Files");else if(a.equals("Settings"))openSecurity();else if(a.equals("Linux Apps"))showWindow("Linux Apps");else showWindow("Media");}
+                        else launchAndroidApp(androidApps.get(i-n.length));
+                        invalidate();return true;
+                    }
+                }
             }
 
             if(surface==Surface.SETTINGS){
-                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)surface=Surface.WALLPAPER;else if(i==1){surface=Surface.DESKTOP;addNotification("Desktop settings ready");}else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)showWindow("Security");else if(i==5)new Updater(MainActivity.this).check();else if(i==6)surface=Surface.CLIPBOARD;else if(i==7){saveSession();addNotification("Session saved");}invalidate();return true;}}
+                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)surface=Surface.WALLPAPER;else if(i==1){surface=Surface.DESKTOP;addNotification("Desktop settings ready");}else if(i==2){refreshAndroidApps();surface=Surface.APPS;}else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();else if(i==5)new Updater(MainActivity.this).check();else if(i==6)surface=Surface.CLIPBOARD;else if(i==7){saveSession();addNotification("Session saved");}invalidate();return true;}}
             }
 
             return true;
