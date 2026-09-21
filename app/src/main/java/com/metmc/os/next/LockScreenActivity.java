@@ -2,6 +2,7 @@ package com.metmc.os.next;
 
 import android.app.*;
 import android.content.*;
+import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.hardware.biometrics.BiometricManager;
