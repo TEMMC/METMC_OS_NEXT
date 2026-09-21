@@ -270,7 +270,7 @@ public class MainActivity extends Activity {
             else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
             else if(surface==Surface.NOTIFICATIONS) drawNotifications(c,w,h);
             else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
-            if(activeWindow!=null && surface==Surface.DESKTOP) drawWindow(c,w,h,activeWindow);
+            if(surface==Surface.DESKTOP) drawAllWindows(c,w,h);
         }
 
         Bitmap customWallpaper;
@@ -643,9 +643,10 @@ public class MainActivity extends Activity {
             if(terminalToolbar==null||terminalInput==null||terminalOutput==null)return;
             terminalToolbar.setVisibility(View.VISIBLE);terminalInput.setVisibility(View.VISIBLE);
             if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
-            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)terminalOutput.getParent().getLayoutParams();
+            ViewParent terminalParent=terminalOutput.getParent();
+            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
             sp.leftMargin=(int)ws.l+12;sp.rightMargin=(int)(getWidth()-ws.r)+12;sp.topMargin=(int)ws.t+108;sp.bottomMargin=(int)(getHeight()-ws.b)+54;
-            terminalOutput.getParent().setLayoutParams(sp);
+            ((View)terminalParent).setLayoutParams(sp);
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
             ip.leftMargin=(int)ws.l+12;ip.rightMargin=Math.max(86,(int)(getWidth()-ws.r)+84);ip.bottomMargin=Math.max(52,(int)(getHeight()-ws.b)+12);
             ip.gravity=Gravity.TOP;ip.topMargin=(int)ws.b-64;terminalInput.setLayoutParams(ip);
