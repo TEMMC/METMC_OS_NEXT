@@ -488,6 +488,20 @@ public class MainActivity extends Activity {
             }
         }
 
+        void openFileEntry(String path){
+            File f=new File(path);
+            if(f.isDirectory()){ Toast.makeText(MainActivity.this,"Opened folder: "+f.getName(),Toast.LENGTH_SHORT).show(); return; }
+            String mime="application/octet-stream";
+            String n=f.getName().toLowerCase(Locale.US);
+            if(n.endsWith(".pdf")) mime="application/pdf";
+            else if(n.endsWith(".png")||n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".webp")) mime="image/*";
+            else if(n.endsWith(".txt")||n.endsWith(".log")||n.endsWith(".json")||n.endsWith(".xml")) mime="text/plain";
+            try{
+                Intent i=new Intent(Intent.ACTION_VIEW); i.setDataAndType(Uri.parse("file://"+path),mime); i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                MainActivity.this.startActivity(i);
+            }catch(Exception e){ Toast.makeText(MainActivity.this,"No app can open "+f.getName(),Toast.LENGTH_SHORT).show(); }
+        }
+
         void drawWindowTaskbar(Canvas c,int w,int h){
             if(openWindows.isEmpty()) return;
             float y=h-126, x=24;
@@ -511,6 +525,15 @@ public class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;
                 if(surface==Surface.DESKTOP){
+                    WindowState files=windows.get("Files");
+                    if(files!=null&&!files.minimized&&x>=files.l&&x<=files.r&&y>=files.t+125&&y<=files.b){
+                        int col=(int)((x-(files.l+24))/140f), row=(int)((y-(files.t+132))/68f);
+                        int idx=row*3+col;
+                        ArrayList<String> entries=new ArrayList<>(fileEntries.values());
+                        if(col>=0&&col<3&&row>=0&&idx>=0&&idx<Math.min(entries.size(),18)){
+                            openFileEntry(entries.get(idx)); return true;
+                        }
+                    }
                     WindowState hit=windowAt(x,y);
                     if(hit!=null){
                         bringToFront(hit.title);
