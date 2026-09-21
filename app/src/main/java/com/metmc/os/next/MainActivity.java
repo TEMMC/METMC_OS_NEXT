@@ -193,18 +193,9 @@ public class MainActivity extends Activity {
         terminalToolbar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
         terminalToolbar.setPadding(6,2,6,2);
         terminalToolbar.setBackgroundColor(0xff111922);
-        Button copy = new Button(this); copy.setText("COPY"); copy.setOnClickListener(v -> { if (terminalOutput != null) ((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("METMC Terminal", terminalOutput.getText())); });
-        Button paste = new Button(this); paste.setText("PASTE"); paste.setOnClickListener(v -> { android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); if(cm.hasPrimaryClip() && terminalInput!=null) terminalInput.append(cm.getPrimaryClip().getItemAt(0).coerceToText(this)); });
-        Button clear = new Button(this); clear.setText("CLEAR"); clear.setOnClickListener(v -> { if(terminalOutput!=null) terminalOutput.setText(""); });
-        terminalToolbar.addView(copy,new LinearLayout.LayoutParams(82,48)); terminalToolbar.addView(paste,new LinearLayout.LayoutParams(82,48)); terminalToolbar.addView(clear,new LinearLayout.LayoutParams(82,48));
+        TextView status=new TextView(this); status.setText("● LIVE  •  DEBIAN"); status.setTextColor(0xff39ff88); status.setTextSize(11); status.setGravity(Gravity.CENTER_VERTICAL); terminalToolbar.addView(status,new LinearLayout.LayoutParams(150,48));
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(252,52); tp.gravity=Gravity.TOP|Gravity.RIGHT; tp.rightMargin=32; tp.topMargin=155; root.addView(terminalToolbar,tp);
 
-        Button run = new Button(this);
-        run.setText("RUN"); run.setTextColor(Color.WHITE); run.setAllCaps(false);
-        run.setOnClickListener(v -> sendTerminalCommand());
-        FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(72,52);
-        rp.gravity=Gravity.RIGHT|Gravity.BOTTOM; rp.rightMargin=28; rp.bottomMargin=98;
-        root.addView(run,rp);
         terminalInput.requestFocus();
     }
 
@@ -241,11 +232,20 @@ public class MainActivity extends Activity {
         boolean dragging=false,resizing=false;
         float dragOffsetX,dragOffsetY;
         final float MIN_W=280f, MIN_H=190f;
+        final LinkedHashMap<String,String> fileEntries=new LinkedHashMap<>();
         float downX,downY,appsScroll=0;
         float appsContentHeight=0;
         int accent=0xff39ff88;
 
-        DesktopView(Context c){ super(c); setFocusable(true); refreshAndroidApps(); }
+        DesktopView(Context c){ super(c); setFocusable(true); refreshAndroidApps(); refreshFileEntries(); }
+        void refreshFileEntries(){
+            fileEntries.clear();
+            File[] roots={new File("/data/local/linux/rootfs/root"),new File("/storage/emulated/0"),new File("/data/local/linux/rootfs/usr/share/applications")};
+            for(File rootDir:roots) if(rootDir.isDirectory()){
+                File[] fs=rootDir.listFiles();
+                if(fs!=null) for(File f:fs) fileEntries.putIfAbsent(f.getAbsolutePath(),f.getAbsolutePath());
+            }
+        }
 
         void refreshAndroidApps(){
             androidApps.clear(); androidApps.addAll(getAndroidApps());
@@ -476,12 +476,15 @@ public class MainActivity extends Activity {
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
             float y=t+132;
-            String[] dirs={"Home","root","storage","data","etc","usr"};
-            for(int i=0;i<dirs.length;i++){
-                float x=l+24+(i%3)*110, yy=y+(i/3)*72;
-                round(c,x,yy,x+94,yy+56,12,0xff151f29);
-                drawAppIcon(c,x+10,yy+10,"Files");
-                text(c,dirs[i],x+48,yy+32,11,0xffd6dfeb);
+            ArrayList<String> dirs=new ArrayList<>(fileEntries.values());
+            for(int i=0;i<Math.min(dirs.size(),18);i++){
+                float x=l+24+(i%3)*140, yy=y+(i/3)*68;
+                round(c,x,yy,x+124,yy+54,10,0xff151f29);
+                File f=new File(dirs.get(i)); drawAppIcon(c,x+8,yy+8,f.isDirectory()?"Files":"Browser");
+                String name=f.getName().isEmpty()?f.getAbsolutePath():f.getName();
+                if(name.length()>16) name=name.substring(0,15)+"…";
+                text(c,name,x+40,yy+24,10,0xffd6dfeb);
+                text(c,f.isDirectory()?"FOLDER":"FILE",x+40,yy+40,8,0xff7f9b8b);
             }
         }
 
