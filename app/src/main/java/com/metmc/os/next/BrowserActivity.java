@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Bundle;
 import android.print.PrintManager;
 import android.print.PrintDocumentAdapter;
