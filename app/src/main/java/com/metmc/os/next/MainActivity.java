@@ -345,7 +345,7 @@ public class MainActivity extends Activity {
         void drawTopBar(Canvas c,int w){
             fill(c,0xe50a1017);c.drawRect(0,0,w,54,p);
             bold(c,"METMC",22,34,16,Color.WHITE); text(c,"Activities",92,34,14,0xffd7deea);
-            text(c,"WORKSPACE "+currentWorkspace,w/2f-47,34,11,0xff8da0b4);
+            text(c,"METMC OS NEXT",w/2f-48,34,11,0xff8da0b4);
             text(c,new SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),w-92,33,14,Color.WHITE);
             text(c,"⌁",w-44,34,15,0xff8da0b4);
         }
@@ -435,7 +435,7 @@ public class MainActivity extends Activity {
             else c.drawRect(x+8,y+9,x+26,y+25,p);
         }
 
-        void drawOverview(Canvas c,int w,int h){overlay(c,w,h);bold(c,"Overview",28,92,25,Color.WHITE);if(openWindows.isEmpty()){round(c,28,142,w-28,214,18,0xff151c26);text(c,"No open METMC windows",50,177,15,0xffdbe3ef);}else{for(int i=0;i<openWindows.size();i++){String s=openWindows.get(i);float l=28+(i%2)*(w/2f-18),t=140+(i/2)*118;round(c,l,t,l+w/2f-26,t+96,18,0xff18212c);drawAppIcon(c,l+22,t+21,s);bold(c,s,l+58,t+29,15,Color.WHITE);text(c,"Workspace 1",l+58,t+51,12,0xff8795a8);}}}
+        void drawOverview(Canvas c,int w,int h){overlay(c,w,h);bold(c,"Overview",28,92,25,Color.WHITE);if(openWindows.isEmpty()){round(c,28,142,w-28,214,18,0xff151c26);text(c,"No open METMC windows",50,177,15,0xffdbe3ef);}else{for(int i=0;i<openWindows.size();i++){String s=openWindows.get(i);float l=28+(i%2)*(w/2f-18),t=140+(i/2)*118;round(c,l,t,l+w/2f-26,t+96,18,0xff18212c);drawAppIcon(c,l+22,t+21,s);bold(c,s,l+58,t+29,15,Color.WHITE);text(c,"Workspace "+currentWorkspace,l+58,t+51,12,0xff8795a8);}}}
 
         void drawQuick(Canvas c,int w,int h){overlay(c,w,h);float l=w-330;round(c,l,68,w-18,h-92,22,0xff151c26);bold(c,"Quick Settings",l+24,104,21,Color.WHITE);String[] q={"Wi-Fi","Bluetooth","Sound","Rotation","Dark Mode","Lock"};for(int i=0;i<q.length;i++){int col=i%2,row=i/2;float x=l+18+col*145,y=148+row*68;round(c,x,y,x+130,y+54,15,0xff202a35);bold(c,q[i],x+14,y+23,12,Color.WHITE);text(c,"Tap to toggle",x+14,y+41,10,0xff9eacbe);}}
 
@@ -682,7 +682,7 @@ public class MainActivity extends Activity {
             if(y<55&&x<180){surface=surface==Surface.OVERVIEW?Surface.DESKTOP:Surface.OVERVIEW;invalidate();return true;}
             if(y<55&&x>w-150){surface=surface==Surface.QUICK?Surface.DESKTOP:Surface.QUICK;invalidate();return true;}
 
-            if(surface==Surface.DESKTOP && y>=86 && y<=270 && x<=190){
+            if(surface==Surface.DESKTOP && y>=86 && y<=270 && x<=190 && windowAt(x,y)==null){
                 int col=x<105?0:1, row=(int)((y-86)/92f), idx=row*2+col;
                 if(idx==0){showWindow("Files");return true;}
                 if(idx==1){launchTerminal();return true;}
