@@ -20,7 +20,10 @@ public class MainActivity extends Activity {
     FrameLayout root;
     EditText terminalInput;
     TextView terminalOutput;
+    TextView terminalPrompt;
     BufferedWriter terminalStdin;
+    final ArrayList<String> terminalHistory = new ArrayList<>();
+    int terminalHistoryIndex = -1;
     java.lang.Process terminalShell;
     LinearLayout terminalToolbar;
     static final int PICK_WALLPAPER = 9001;
@@ -97,8 +100,7 @@ public class MainActivity extends Activity {
         return list;
     }
 
-    void launchAndroidApp(ResolveInfo info) {
-        try {
+    void launchAndroidApp(ResolveInfo info) {        try {
             Intent i = new Intent(Intent.ACTION_MAIN);
             i.addCategory(Intent.CATEGORY_LAUNCHER);
             i.setComponent(new ComponentName(info.activityInfo.packageName, info.activityInfo.name));
@@ -117,6 +119,52 @@ public class MainActivity extends Activity {
         }
     }
 
+    void showGlobalSearch() {
+        final EditText input=new EditText(this);
+        input.setSingleLine(true);
+        input.setHint("Search applications, files and open windows");
+        input.setPadding(18,4,18,4);
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(18,10,18,6);
+        box.addView(input,new LinearLayout.LayoutParams(-1,56));
+        final TextView results=new TextView(this);
+        results.setTextColor(Color.WHITE);
+        results.setTextSize(13);
+        results.setTypeface(Typeface.create("sans",Typeface.NORMAL));
+        results.setPadding(18,12,18,12);
+        box.addView(results,new LinearLayout.LayoutParams(-1,260));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("METMC Search").setView(box).setNegativeButton("Close",null).create();
+        Runnable update=()->{
+            String q=input.getText().toString().trim().toLowerCase(Locale.US);
+            StringBuilder out=new StringBuilder();
+            if(q.isEmpty()){out.append("Start typing to search apps, files and windows.");}
+            else{
+                int count=0;
+                for(String n:new ArrayList<>(desktop.recentItems)){
+                    if(n.toLowerCase(Locale.US).contains(q)){out.append("RECENT  ").append(n).append("\n");if(++count>=8)break;}
+                }
+                for(ResolveInfo r:desktop.androidApps){
+                    String n=String.valueOf(r.loadLabel(getPackageManager()));
+                    if(n.toLowerCase(Locale.US).contains(q)){out.append("APP  ").append(n).append("\n");if(++count>=12)break;}
+                }
+                for(String path:new ArrayList<>(desktop.fileEntries.values())){
+                    String n=new File(path).getName();
+                    if(n.toLowerCase(Locale.US).contains(q)){out.append("FILE  ").append(n).append("\n");if(++count>=16)break;}
+                }
+                if(count==0)out.append("No matching items.");
+            }
+            results.setText(out.toString());
+        };
+        input.addTextChangedListener(new android.text.TextWatcher(){
+            public void beforeTextChanged(CharSequence s,int st,int c,int a){}
+            public void onTextChanged(CharSequence s,int st,int b,int c){update.run();}
+            public void afterTextChanged(android.text.Editable e){}
+        });
+        dialog.setOnShowListener(d->{update.run();input.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);});
+        dialog.show();
+    }
+
     void launchBrowser() {
         try { desktop.showWindow("Browser"); startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))); }
         catch (Exception e) { desktop.showWindow("Browser"); }
@@ -126,6 +174,8 @@ public class MainActivity extends Activity {
 
     void startTerminalShell() {
         if (terminalShell != null && terminalShell.isAlive()) return;
+        if (terminalOutput != null) terminalOutput.setText("");
+        terminalHistoryIndex = -1;
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
                 String script = "R='" + ROOTFS + "'; " +
@@ -137,6 +187,7 @@ public class MainActivity extends Activity {
                         "mkdir -p \"$R/tmp\" \"$R/run\"; " +
                         "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
                         "export HOME=/root; export TERM=xterm-256color; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
+                        "export PS1='root@debian:~$ '; export PS2='> '; " +
                         "exec chroot \"$R\" /bin/bash -l";
                 terminalShell = new ProcessBuilder("su","-c",script).redirectErrorStream(true).start();
                 terminalStdin = new BufferedWriter(new OutputStreamWriter(terminalShell.getOutputStream()));
@@ -165,9 +216,36 @@ public class MainActivity extends Activity {
         if (terminalStdin == null || terminalInput == null) return;
         String cmd = terminalInput.getText().toString();
         if (cmd.trim().isEmpty()) return;
-        appendTerminal("root@debian:~$ " + cmd + "\\n");
-        try { terminalStdin.write(cmd); terminalStdin.newLine(); terminalStdin.flush(); terminalInput.setText(""); }
-        catch (Exception e) { appendTerminal("\n[Command failed] " + e + "\n"); }
+        terminalHistory.remove(cmd);
+        terminalHistory.add(cmd);
+        while (terminalHistory.size() > 100) terminalHistory.remove(0);
+        terminalHistoryIndex = terminalHistory.size();
+        appendTerminal("root@debian:~$ " + cmd + "\n");
+        try {
+            terminalStdin.write(cmd);
+            terminalStdin.newLine();
+            terminalStdin.flush();
+            terminalInput.setText("");
+            terminalInput.requestFocus();
+        } catch (Exception e) {
+            appendTerminal("[METMC] command input failed: " + e + "\n");
+        }
+    }
+
+    void terminalInterrupt() {
+        try {
+            if (terminalStdin != null) {
+                terminalStdin.write("\u0003");
+                terminalStdin.flush();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    void terminalHistoryMove(int direction) {
+        if (terminalInput == null || terminalHistory.isEmpty()) return;
+        terminalHistoryIndex = Math.max(0, Math.min(terminalHistory.size(), terminalHistoryIndex + direction));
+        terminalInput.setText(terminalHistoryIndex < terminalHistory.size() ? terminalHistory.get(terminalHistoryIndex) : "");
+        terminalInput.setSelection(terminalInput.length());
     }
 
     void closeTerminalShell() {
@@ -178,47 +256,55 @@ public class MainActivity extends Activity {
 
     void buildTerminalOverlay() {
         if (terminalInput != null) return;
+
         terminalOutput = new TextView(this);
         terminalOutput.setTextColor(0xffd8f7df);
         terminalOutput.setTextSize(12);
         terminalOutput.setTypeface(Typeface.MONOSPACE);
         terminalOutput.setPadding(12,8,12,8);
         terminalOutput.setGravity(Gravity.TOP|Gravity.START);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xff080c0d);
-        scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-1));
+        scroll.setFillViewport(false);
+        scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-2));
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
-        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=205; sp.bottomMargin=130;
+        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=155; sp.bottomMargin=128;
         root.addView(scroll, sp);
+
+        terminalPrompt = new TextView(this);
+        terminalPrompt.setText("root@debian:~$");
+        terminalPrompt.setTextColor(0xff39ff88);
+        terminalPrompt.setTextSize(12);
+        terminalPrompt.setTypeface(Typeface.MONOSPACE);
+        terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(112,48);
+        pp.leftMargin=32; pp.gravity=Gravity.TOP; pp.topMargin=0;
+        root.addView(terminalPrompt,pp);
 
         terminalInput = new EditText(this);
         terminalInput.setSingleLine(true);
         terminalInput.setTextColor(Color.WHITE);
-        terminalInput.setHintTextColor(0xff738294);
-        terminalInput.setHint("root@debian:~$ command");
+        terminalInput.setHintTextColor(0xff536575);
+        terminalInput.setHint("type a command");
         terminalInput.setTextSize(12);
         terminalInput.setTypeface(Typeface.MONOSPACE);
-        terminalInput.setPadding(12,0,12,0);
-        terminalInput.setBackgroundColor(0xff151e27);
+        terminalInput.setPadding(8,0,8,0);
+        terminalInput.setBackgroundColor(Color.TRANSPARENT);
         terminalInput.setOnEditorActionListener((v,id,event)->{ sendTerminalCommand(); return true; });
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,52);
-        ip.leftMargin=32; ip.rightMargin=100; ip.gravity=Gravity.BOTTOM; ip.bottomMargin=98;
+        terminalInput.setOnKeyListener((v,key,event)->{
+            if(event.getAction()!=KeyEvent.ACTION_DOWN) return false;
+            if(key==KeyEvent.KEYCODE_DPAD_UP){ terminalHistoryMove(-1); return true; }
+            if(key==KeyEvent.KEYCODE_DPAD_DOWN){ terminalHistoryMove(1); return true; }
+            if(key==KeyEvent.KEYCODE_C && event.isCtrlPressed()){ terminalInterrupt(); return true; }
+            return false;
+        });
+        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
+        ip.leftMargin=148; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=0;
         root.addView(terminalInput,ip);
-
-        terminalToolbar = new LinearLayout(this);
-        terminalToolbar.setOrientation(LinearLayout.HORIZONTAL);
-        terminalToolbar.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
-        terminalToolbar.setPadding(6,2,6,2);
-        terminalToolbar.setBackgroundColor(0xff111922);
-        TextView status=new TextView(this); status.setText("● LIVE  •  DEBIAN"); status.setTextColor(0xff39ff88); status.setTextSize(11); status.setGravity(Gravity.CENTER_VERTICAL); terminalToolbar.addView(status,new LinearLayout.LayoutParams(150,48));
-        FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(252,52); tp.gravity=Gravity.TOP|Gravity.RIGHT; tp.rightMargin=32; tp.topMargin=155; root.addView(terminalToolbar,tp);
-
-        appendTerminal("\nMETMC Terminal • Debian GNU/Linux • native PTY\n");
         terminalInput.requestFocus();
     }
-
     void removeTerminalOverlay() {
-        if (terminalToolbar != null) { ViewParent p=terminalToolbar.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalToolbar); terminalToolbar=null; }
         if (terminalInput != null) {
             ViewParent p=terminalInput.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalInput);
             terminalInput=null;
@@ -297,8 +383,7 @@ public class MainActivity extends Activity {
         @Override protected void onDraw(Canvas c){
             int w=getWidth(),h=getHeight();
             drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h); drawDock(c,w,h);
-            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);
-            if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
+            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);            if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
             else if(surface==Surface.APPS) drawApps(c,w,h);
             else if(surface==Surface.QUICK) drawQuick(c,w,h);
             else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
@@ -344,8 +429,11 @@ public class MainActivity extends Activity {
 
         void drawTopBar(Canvas c,int w){
             fill(c,0xe50a1017);c.drawRect(0,0,w,54,p);
-            bold(c,"METMC",22,34,16,Color.WHITE); text(c,"Activities",92,34,14,0xffd7deea);
-            text(c,"METMC OS NEXT",w/2f-48,34,11,0xff8da0b4);
+            bold(c,"METMC",22,34,16,Color.WHITE);
+            text(c,"Activities",92,34,14,0xffd7deea);
+            round(c,188,10,Math.min(390,w-190),44,12,0xff151e27);
+            text(c,"⌕  Search applications, files and windows",202,33,11,0xff8fa0b2);
+            text(c,"METMC OS NEXT",Math.max(400,w/2f-48),34,11,0xff8da0b4);
             text(c,new SimpleDateFormat("HH:mm",Locale.getDefault()).format(new Date()),w-92,33,14,Color.WHITE);
             text(c,"⌁",w-44,34,15,0xff8da0b4);
         }
@@ -397,8 +485,7 @@ public class MainActivity extends Activity {
             else if(n.equals("Terminal")){c.drawRect(cx-13,cy-11,cx+13,cy+11,p);c.drawLine(cx-8,cy-2,cx-2,cy+2,p);c.drawLine(cx-2,cy+2,cx-8,cy+6,p);}
             else if(n.equals("Browser")){c.drawCircle(cx,cy,12,p);c.drawLine(cx-12,cy,cx+12,cy,p);}
             else if(n.equals("Settings")){c.drawCircle(cx,cy,8,p);c.drawCircle(cx,cy,3,p);}
-            else if(n.equals("quick")){fill(c,0xffd7e1ef);c.drawCircle(cx,cy,11,p);fill(c,0xff202934);c.drawCircle(cx+4,cy-4,3,p);}
-            else c.drawRect(cx-10,cy-9,cx+10,cy+9,p);
+            else if(n.equals("quick")){fill(c,0xffd7e1ef);c.drawCircle(cx,cy,11,p);fill(c,0xff202934);c.drawCircle(cx+4,cy-4,3,p);}            else c.drawRect(cx-10,cy-9,cx+10,cy+9,p);
         }
 
         void overlay(Canvas c,int w,int h){fill(c,0xb003080d);c.drawRect(0,54,w,h-82,p);}
@@ -435,7 +522,35 @@ public class MainActivity extends Activity {
             else c.drawRect(x+8,y+9,x+26,y+25,p);
         }
 
-        void drawOverview(Canvas c,int w,int h){overlay(c,w,h);bold(c,"Overview",28,92,25,Color.WHITE);if(openWindows.isEmpty()){round(c,28,142,w-28,214,18,0xff151c26);text(c,"No open METMC windows",50,177,15,0xffdbe3ef);}else{for(int i=0;i<openWindows.size();i++){String s=openWindows.get(i);float l=28+(i%2)*(w/2f-18),t=140+(i/2)*118;round(c,l,t,l+w/2f-26,t+96,18,0xff18212c);drawAppIcon(c,l+22,t+21,s);bold(c,s,l+58,t+29,15,Color.WHITE);text(c,"Workspace "+currentWorkspace,l+58,t+51,12,0xff8795a8);}}}
+        void drawOverview(Canvas c,int w,int h){
+            overlay(c,w,h);
+            bold(c,"Overview",28,92,25,Color.WHITE);
+            text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" open windows",28,116,12,0xff8f9bad);
+            if(openWindows.isEmpty()){
+                round(c,28,142,w-28,214,18,0xff151c26);
+                text(c,"No open METMC windows",50,177,15,0xffdbe3ef);
+            } else {
+                for(int i=0;i<openWindows.size();i++){
+                    String s=openWindows.get(i);
+                    WindowState ws=windows.get(s);
+                    float l=28+(i%2)*(w/2f-18),t=140+(i/2)*132;
+                    float r=l+w/2f-26,b=t+108;
+                    round(c,l,t,r,b,18,0xff18212c);
+                    round(c,l+10,t+10,r-10,t+62,12,0xff0b1118);
+                    drawAppIcon(c,l+22,t+24,s);
+                    bold(c,s,l+64,t+35,15,Color.WHITE);
+                    text(c,ws!=null&&ws.minimized?"MINIMIZED":"ACTIVE WINDOW",l+64,t+55,10,0xff39ff88);
+                    text(c,"Workspace "+currentWorkspace,l+18,t+88,11,0xff8795a8);
+                    text(c,"Tap to focus",r-92,t+88,10,0xff9aa7b8);
+                }
+            }
+            if(!recentItems.isEmpty()){
+                bold(c,"Recent",28,h-145,14,Color.WHITE);
+                StringBuilder recent=new StringBuilder();
+                for(int i=0;i<Math.min(5,recentItems.size());i++){if(i>0)recent.append("  •  ");recent.append(recentItems.get(i));}
+                text(c,recent.toString(),28,h-122,10,0xff9aa7b8);
+            }
+        }
 
         void drawQuick(Canvas c,int w,int h){overlay(c,w,h);float l=w-330;round(c,l,68,w-18,h-92,22,0xff151c26);bold(c,"Quick Settings",l+24,104,21,Color.WHITE);String[] q={"Wi-Fi","Bluetooth","Sound","Rotation","Dark Mode","Lock"};for(int i=0;i<q.length;i++){int col=i%2,row=i/2;float x=l+18+col*145,y=148+row*68;round(c,x,y,x+130,y+54,15,0xff202a35);bold(c,q[i],x+14,y+23,12,Color.WHITE);text(c,"Tap to toggle",x+14,y+41,10,0xff9eacbe);}}
 
@@ -497,8 +612,7 @@ public class MainActivity extends Activity {
                 WindowState ws=windows.get(title);
                 if(ws!=null && !ws.minimized) drawWindow(c,w,h,ws,title);
             }
-            c.restore();
-            drawWindowTaskbar(c,w,h);
+            c.restore();            drawWindowTaskbar(c,w,h);
         }
 
         void drawWindow(Canvas c,int w,int h,WindowState ws,String title){
@@ -597,8 +711,7 @@ public class MainActivity extends Activity {
                 downX=x;downY=y;
                 if(surface==Surface.DESKTOP){
                     WindowState files=windows.get("Files");
-                    WindowState hit=windowAt(x,y);
-                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
+                    WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
                         float contentTop=files.t+140, contentBottom=Math.min(files.b-12,contentTop+408);
                         if(x>=files.l+24&&x<=files.r-24&&y>=contentTop&&y<=contentBottom){
                             int col=(int)((x-(files.l+24))/140f), row=(int)((y-contentTop)/68f);
@@ -687,6 +800,7 @@ public class MainActivity extends Activity {
                 int target=Math.max(1,Math.min(4,1+(int)((x-(w/2f-105))/52f)));
                 switchWorkspace(target); return true;
             }
+            if(y<55&&x>=188&&x<=Math.min(390,w-190)){showGlobalSearch();return true;}
             if(y<55&&x<180){surface=surface==Surface.OVERVIEW?Surface.DESKTOP:Surface.OVERVIEW;invalidate();return true;}
             if(y<55&&x>w-150){surface=surface==Surface.QUICK?Surface.DESKTOP:Surface.QUICK;invalidate();return true;}
 
@@ -697,7 +811,6 @@ public class MainActivity extends Activity {
                 if(idx==2){launchBrowser();return true;}
                 if(idx==3){surface=Surface.APPS;invalidate();return true;}
             }
-
             if(y>h-88){
                 float dw=Math.min(590,w-28),left=(w-dw)/2f;
                 if(x>=left-8&&x<left+54){surface=surface==Surface.APPS?Surface.DESKTOP:Surface.APPS;invalidate();return true;}
@@ -791,7 +904,7 @@ public class MainActivity extends Activity {
         }
 
         void hideTerminalOverlay(){
-            if(terminalToolbar!=null)terminalToolbar.setVisibility(View.GONE);
+            if(terminalPrompt!=null)terminalPrompt.setVisibility(View.GONE);
             if(terminalInput!=null)terminalInput.setVisibility(View.GONE);
             if(terminalOutput!=null&&terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.GONE);
         }
@@ -799,26 +912,32 @@ public class MainActivity extends Activity {
         void syncTerminalOverlay(){
             WindowState ws=windows.get("Terminal");
             if(ws==null||ws.minimized||!"Terminal".equals(activeWindow)||surface!=Surface.DESKTOP){hideTerminalOverlay();return;}
-            if(terminalToolbar==null||terminalInput==null||terminalOutput==null)return;
-            terminalToolbar.setVisibility(View.VISIBLE);terminalInput.setVisibility(View.VISIBLE);
+            if(terminalInput==null||terminalOutput==null||terminalPrompt==null)return;
+            terminalPrompt.setVisibility(View.VISIBLE);
+            terminalInput.setVisibility(View.VISIBLE);
             if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
+
             ViewParent terminalParent=terminalOutput.getParent();
             FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
-            sp.width=Math.max(1,(int)(ws.r-ws.l-24)); sp.height=Math.max(1,(int)(ws.b-ws.t-166));
-            sp.leftMargin=(int)ws.l+12; sp.rightMargin=0; sp.topMargin=(int)ws.t+108; sp.bottomMargin=0;
+            sp.width=Math.max(1,(int)(ws.r-ws.l-24));
+            sp.height=Math.max(1,(int)(ws.b-ws.t-156));
+            sp.leftMargin=(int)ws.l+12;
+            sp.topMargin=(int)ws.t+112;
+            sp.rightMargin=0; sp.bottomMargin=0;
             ((View)terminalParent).setLayoutParams(sp);
-            if(terminalParent instanceof ViewGroup){
-                ((ViewGroup)terminalParent).setClipChildren(true);
-                ((ViewGroup)terminalParent).setClipToPadding(true);
-            }
-            FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
-            ip.width=Math.max(1,(int)(ws.r-ws.l-24)); ip.height=48;
-            ip.leftMargin=(int)ws.l+12; ip.rightMargin=0; ip.gravity=Gravity.TOP; ip.topMargin=Math.max((int)ws.t+108,(int)ws.b-60); ip.bottomMargin=0; terminalInput.setLayoutParams(ip);
-            FrameLayout.LayoutParams tp=(FrameLayout.LayoutParams)terminalToolbar.getLayoutParams();
-            tp.width=Math.min(210,Math.max(150,(int)(ws.r-ws.l-24))); tp.height=48;
-            tp.leftMargin=Math.max((int)ws.l+12,(int)ws.r-tp.width-12); tp.topMargin=(int)ws.t+54; tp.rightMargin=0; tp.bottomMargin=0; tp.gravity=Gravity.TOP|Gravity.LEFT; terminalToolbar.setLayoutParams(tp);
-        }
 
+            FrameLayout.LayoutParams pp=(FrameLayout.LayoutParams)terminalPrompt.getLayoutParams();
+            pp.width=112; pp.height=48;
+            pp.leftMargin=(int)ws.l+12; pp.topMargin=(int)ws.b-60;
+            pp.rightMargin=0; pp.bottomMargin=0; pp.gravity=Gravity.TOP|Gravity.LEFT;
+            terminalPrompt.setLayoutParams(pp);
+
+            FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
+            ip.width=Math.max(1,(int)(ws.r-ws.l-148)); ip.height=48;
+            ip.leftMargin=(int)ws.l+124; ip.topMargin=(int)ws.b-60;
+            ip.rightMargin=0; ip.bottomMargin=0; ip.gravity=Gravity.TOP|Gravity.LEFT;
+            terminalInput.setLayoutParams(ip);
+        }
         void showWindow(String name){
             if("Files".equals(name) && android.os.Build.VERSION.SDK_INT>=30 && !android.os.Environment.isExternalStorageManager()){
                 try{
