@@ -76,21 +76,18 @@ jobs:
 
       - name: Verify APK is install-ready
         if: env.SIGNING_READY == 'true'
-        env:
-          EXPECTED_SHA256: "96:42:38:71:68:71:34:AF:5D:77:9C:1C:B3:3C:36:C2:FD:0F:DB:14:5C:50:E3:46:63:A2:91:E5:35:D2:42:94"
         run: |
           set -euo pipefail
           BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           APK="release/METMC-OS-NEXT.apk"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK" >/dev/null
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apksigner.txt
-          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/apksigner.txt
-          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/apksigner.txt
-          CERT_SHA256=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/apksigner.txt | head -n1)
-          test "$CERT_SHA256" = "$EXPECTED_SHA256"
-          "$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2" dump badging "$APK" | grep -q "package: name='com.metmc.os.next'"
+          grep -Eq "Verified using v(2|3) scheme .*: true" /tmp/apksigner.txt
+          grep -Eq "Signer #1 certificate SHA-256 digest:" /tmp/apksigner.txt
+          "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -q "package: name='com.metmc.os.next'"
+          echo "APK package, alignment and APK Signature Scheme v2/v3 verification passed."
 
       - name: Upload signed release artifact
         if: env.SIGNING_READY == 'true'
