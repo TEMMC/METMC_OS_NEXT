@@ -14,6 +14,10 @@ import java.io.*;
 import java.text.*;
 import java.util.*;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 public class MainActivity extends Activity {
     DesktopView desktop;
@@ -624,6 +628,12 @@ public class MainActivity extends Activity {
         int accent=0xff39ff88;
         String fileDirectory="/storage/emulated/0";
         String fileParentDirectory=null;
+        String pendingFilePath=null;
+        int pendingAppIndex=-1;
+        boolean gestureMoved=false;
+        boolean showHiddenFiles=false;
+        int fileSortMode=0; // 0=name, 1=modified, 2=size
+        String fileFilter="";
 
         DesktopView(Context c){ super(c); setFocusable(true); clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); refreshAndroidApps(); refreshFileEntries();
             if(clipboardManager!=null) clipboardManager.addPrimaryClipChangedListener(() -> captureClipboard());
@@ -645,14 +655,24 @@ public class MainActivity extends Activity {
             File dir=new File(fileDirectory);
             if(!dir.isDirectory()) { fileDirectory="/storage/emulated/0"; dir=new File(fileDirectory); }
             File parent=dir.getParentFile();
-            if(parent!=null) { fileParentDirectory=parent.getAbsolutePath(); fileEntries.put("..",parent.getAbsolutePath()); }
+            fileParentDirectory=parent!=null?parent.getAbsolutePath():null;
+            if(parent!=null) fileEntries.put("..",parent.getAbsolutePath());
             File[] fs=dir.listFiles();
             if(fs!=null){
-                Arrays.sort(fs,(a,b)->{
+                final String filter=fileFilter==null?"":fileFilter.trim().toLowerCase(Locale.US);
+                ArrayList<File> visible=new ArrayList<>();
+                for(File f:fs){
+                    if(!showHiddenFiles && f.getName().startsWith(".")) continue;
+                    if(!filter.isEmpty() && !f.getName().toLowerCase(Locale.US).contains(filter)) continue;
+                    visible.add(f);
+                }
+                Collections.sort(visible,(a,b)->{
                     if(a.isDirectory()!=b.isDirectory()) return a.isDirectory()?-1:1;
+                    if(fileSortMode==1) return Long.compare(b.lastModified(),a.lastModified());
+                    if(fileSortMode==2) return Long.compare(b.length(),a.length());
                     return a.getName().compareToIgnoreCase(b.getName());
                 });
-                for(File f:fs) fileEntries.put(f.getAbsolutePath(),f.getAbsolutePath());
+                for(File f:visible) fileEntries.put(f.getAbsolutePath(),f.getAbsolutePath());
             }
         }
 
@@ -1096,6 +1116,9 @@ public class MainActivity extends Activity {
             for(int i=0;i<3;i++){c.drawLine(rr-18-i*6,bb-5,rr-5,bb-18-i*6,p);}
         }
 
+        int fileGridColumns(float available){
+            return Math.max(2,Math.min(4,(int)(available/150f)));
+        }
         float windowContentHeight(String title,WindowState ws){
             if("Settings".equals(title)) return 62f+12f*52f+40f;
             if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+50f;
@@ -1103,7 +1126,12 @@ public class MainActivity extends Activity {
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
             if("Overview".equals(title)) return 92f+((openWindows.size()+1)/2)*82f+60f;
-            if("Files".equals(title)) return 142f+Math.max(1,(fileEntries.size()+2)/3)*72f+30f;
+            if("Files".equals(title)) {
+                float available=Math.max(1,ws.r-ws.l-48), gap=10f;
+                int cols=fileGridColumns(available);
+                float tileW=(available-gap*(cols-1))/cols;
+                return 174f+Math.max(1,(fileEntries.size()+cols-1)/cols)*72f+50f;
+            }
             if("Linux Apps".equals(title)) return 360f;
             if("Media".equals(title)) return 300f;
             if("Desktop & Workspaces".equals(title)) return 430f;
@@ -1352,29 +1380,38 @@ public class MainActivity extends Activity {
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
             c.save();
-            c.clipRect(l+18,t+118,r-18,b-12);
-            text(c,"PATH  "+fileDirectory,l+28,t+128,10,0xff6f8296);
-            round(c,l+28,t+136,l+118,t+164,8,0xff294b39);
-            text(c,"NEW FOLDER",l+38,t+154,8,Color.WHITE);
-            round(c,l+124,t+136,l+196,t+164,8,0xff202a35);
-            text(c,"REFRESH",l+138,t+154,8,Color.WHITE);
-            float contentTop=t+174;
+            c.clipRect(l+14,t+54,r-14,b-12);
+            String displayPath=fileDirectory;
+            if(displayPath.length()>58) displayPath="…"+displayPath.substring(displayPath.length()-57);
+            text(c,displayPath,l+28,t+76,10,0xff9aaabd);
+            // File-manager toolbar: navigation, creation, archive, sorting and hidden files.
+            round(c,l+24,t+86,l+82,t+116,8,0xff202b36); text(c,"UP",l+43,t+106,8,Color.WHITE);
+            round(c,l+88,t+86,l+158,t+116,8,0xff294b39); text(c,"NEW",l+107,t+106,8,Color.WHITE);
+            round(c,l+164,t+86,l+238,t+116,8,0xff202b36); text(c,"ZIP",l+188,t+106,8,Color.WHITE);
+            round(c,l+244,t+86,l+318,t+116,8,0xff202b36); text(c,"SORT",l+263,t+106,8,Color.WHITE);
+            round(c,l+324,t+86,l+408,t+116,8,showHiddenFiles?0xff294b39:0xff202b36); text(c,showHiddenFiles?"HIDDEN":"FILES",l+341,t+106,8,Color.WHITE);
+            text(c,""+Math.max(0,fileEntries.size()-(fileParentDirectory!=null?1:0))+" items",l+416,t+106,9,0xff7f8d9f);
+
+            float contentTop=t+128, contentBottom=b-12;
             float available=Math.max(1,r-l-48);
-            int columns=Math.max(2,Math.min(4,(int)(available/150f)));
+            int columns=fileGridColumns(available);
             float gap=10f, tileW=(available-gap*(columns-1))/columns;
             float tileH=62f, step=72f;
-            ArrayList<String> dirs=new ArrayList<>(fileEntries.values());
-            int visible=Math.min(dirs.size(),Math.max(1,(int)((b-contentTop-12)/step))*columns);
+            ArrayList<String> entries=new ArrayList<>(fileEntries.values());
+            int visibleRows=Math.max(1,(int)((contentBottom-contentTop)/step)+1);
+            int visible=Math.min(entries.size(),visibleRows*columns);
             for(int i=0;i<visible;i++){
                 int col=i%columns,row=i/columns;
                 float x=l+24+col*(tileW+gap), yy=contentTop+row*step;
                 round(c,x,yy,x+tileW,yy+tileH,12,0xff151f29);
-                File f=new File(dirs.get(i)); drawAppIcon(c,x+10,yy+11,f.isDirectory()?"Files":"Browser");
+                File f=new File(entries.get(i));
+                drawAppIcon(c,x+10,yy+11,f.isDirectory()?"Files":(isArchiveFile(f)?"Linux Apps":"Browser"));
                 String name=f.getName().isEmpty()?f.getAbsolutePath():f.getName();
-                if(dirs.get(i).equals(fileParentDirectory)) name="..";
-                if(name.length()>18) name=name.substring(0,17)+"…";
-                text(c,name,x+58,yy+27,10,0xffd6dfeb);
-                text(c,f.isDirectory()?"FOLDER":"FILE",x+58,yy+44,8,0xff7f9b8b);
+                if(entries.get(i).equals(fileParentDirectory)) name="..";
+                if(name.length()>22) name=name.substring(0,21)+"…";
+                text(c,name,x+58,yy+26,10,0xffd6dfeb);
+                String meta=f.isDirectory()?"FOLDER":formatFileSize(f.length());
+                text(c,meta,x+58,yy+43,8,0xff7f9b8b);
             }
             c.restore();
         }
@@ -1433,14 +1470,26 @@ public class MainActivity extends Activity {
 
         void showFileActions(String path){
             File f=new File(path);
-            String[] actions={"Open","Copy","Cut","Paste here","Rename","Delete"};
-            new AlertDialog.Builder(MainActivity.this).setTitle(f.getName()).setItems(actions,(d,which)->{
-                if(which==0) openFileEntry(path);
-                else if(which==1){ fileClipboardPath=path; fileClipboardCut=false; addNotification("Copied: "+f.getName()); }
-                else if(which==2){ fileClipboardPath=path; fileClipboardCut=true; addNotification("Cut: "+f.getName()); }
-                else if(which==3) pasteFileEntry(fileDirectory);
-                else if(which==4) renameFileEntry(path);
-                else deleteFileEntry(path);
+            ArrayList<String> actions=new ArrayList<>();
+            actions.add("Open"); actions.add("Copy"); actions.add("Cut"); actions.add("Paste here");
+            actions.add("Rename"); actions.add("Delete");
+            if(isArchiveFile(f)) { actions.add("Extract here"); actions.add("Test archive"); }
+            else actions.add("Compress to ZIP");
+            actions.add("Share"); actions.add("Properties");
+            String[] menu=actions.toArray(new String[0]);
+            new AlertDialog.Builder(MainActivity.this).setTitle(f.getName()).setItems(menu,(d,which)->{
+                String action=menu[which];
+                if(action.equals("Open")) openFileEntry(path);
+                else if(action.equals("Copy")){ fileClipboardPath=path; fileClipboardCut=false; addNotification("Copied: "+f.getName()); }
+                else if(action.equals("Cut")){ fileClipboardPath=path; fileClipboardCut=true; addNotification("Cut: "+f.getName()); }
+                else if(action.equals("Paste here")) pasteFileEntry(fileDirectory);
+                else if(action.equals("Rename")) renameFileEntry(path);
+                else if(action.equals("Delete")) deleteFileEntry(path);
+                else if(action.equals("Extract here")) extractZipAsync(f,fileDirectory);
+                else if(action.equals("Test archive")) testZipAsync(f);
+                else if(action.equals("Compress to ZIP")) compressZipAsync(f);
+                else if(action.equals("Share")) shareFile(f);
+                else if(action.equals("Properties")) showFileProperties(f);
             }).show();
         }
 
@@ -1478,6 +1527,7 @@ public class MainActivity extends Activity {
             String n=f.getName().toLowerCase(Locale.US);
             if(n.endsWith(".pdf")) mime="application/pdf";
             else if(n.endsWith(".png")||n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".webp")) mime="image/*";
+            else if(n.endsWith(".zip")) { showFileActions(path); return; }
             else if(n.endsWith(".txt")||n.endsWith(".log")||n.endsWith(".json")||n.endsWith(".xml")||n.endsWith(".md")||n.endsWith(".csv")) mime="text/plain";
             try{
                 Uri uri=FileProvider.getUriForFile(MainActivity.this,"com.metmc.os.next.fileprovider",f);
@@ -1494,6 +1544,117 @@ public class MainActivity extends Activity {
                 }
                 MainActivity.this.startActivity(i);
             }catch(Exception e){ Toast.makeText(MainActivity.this,"No app can open "+f.getName(),Toast.LENGTH_SHORT).show(); }
+        }
+
+        boolean isArchiveFile(File f){
+            String n=f.getName().toLowerCase(Locale.US);
+            return n.endsWith(".zip");
+        }
+        String formatFileSize(long bytes){
+            if(bytes<1024) return bytes+" B";
+            double v=bytes/1024.0;
+            if(v<1024) return String.format(Locale.US,"%.1f KB",v);
+            v/=1024.0;
+            if(v<1024) return String.format(Locale.US,"%.1f MB",v);
+            return String.format(Locale.US,"%.1f GB",v/1024.0);
+        }
+        File uniqueFile(File dir,String base){
+            File out=new File(dir,base); if(!out.exists()) return out;
+            String name=base,ext=""; int dot=base.lastIndexOf('.');
+            if(dot>0){name=base.substring(0,dot);ext=base.substring(dot);}
+            for(int i=1;i<10000;i++){out=new File(dir,name+" ("+i+")"+ext);if(!out.exists())return out;}
+            return out;
+        }
+        void compressZipAsync(File src){
+            File out=uniqueFile(new File(fileDirectory),src.getName()+".zip");
+            addNotification("Compressing: "+src.getName());
+            Executors.newSingleThreadExecutor().execute(()->{
+                boolean ok=false; String error=null;
+                try{ zipRecursively(src,src.getName(),new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(out)))); ok=true; }
+                catch(Exception e){ error=e.getMessage(); try{out.delete();}catch(Exception ignored){} }
+                final boolean result=ok; final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->{
+                    addNotification(result?"Created "+out.getName():"Compression failed"+(err==null?"":": "+err));
+                    refreshFileEntries(); invalidate();
+                });
+            });
+        }
+        void zipRecursively(File src,String entryName,ZipOutputStream zos)throws IOException{
+            if(src.isDirectory()){
+                File[] children=src.listFiles();
+                if(children==null||children.length==0){
+                    String dirName=entryName.endsWith("/")?entryName:entryName+"/";
+                    zos.putNextEntry(new ZipEntry(dirName)); zos.closeEntry(); return;
+                }
+                for(File child:children) zipRecursively(child,entryName+"/"+child.getName(),zos);
+                return;
+            }
+            ZipEntry entry=new ZipEntry(entryName); entry.setTime(src.lastModified()); zos.putNextEntry(entry);
+            try(InputStream in=new BufferedInputStream(new FileInputStream(src))){
+                byte[] buf=new byte[65536]; int n; while((n=in.read(buf))>0) zos.write(buf,0,n);
+            } finally { zos.closeEntry(); }
+        }
+        void extractZipAsync(File zip,String destination){
+            File dest=uniqueFile(new File(destination),stripExtension(zip.getName()));
+            if(!dest.mkdirs() && !dest.isDirectory()){ addNotification("Could not create extraction folder"); return; }
+            addNotification("Extracting: "+zip.getName());
+            Executors.newSingleThreadExecutor().execute(()->{
+                boolean ok=false; String error=null;
+                try{ unzipToDirectory(zip,dest); ok=true; }
+                catch(Exception e){ error=e.getMessage(); }
+                final boolean result=ok; final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->{
+                    addNotification(result?"Extracted to "+dest.getName():"Extraction failed"+(err==null?"":" : "+err));
+                    refreshFileEntries(); invalidate();
+                });
+            });
+        }
+        String stripExtension(String n){int p=n.toLowerCase(Locale.US).endsWith(".zip")?n.length()-4:n.lastIndexOf('.');return p>0?n.substring(0,p):n;}
+        void unzipToDirectory(File zip,File dest)throws IOException{
+            String root=dest.getCanonicalPath()+File.separator;
+            try(ZipInputStream zis=new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))){
+                ZipEntry entry;
+                byte[] buf=new byte[65536];
+                while((entry=zis.getNextEntry())!=null){
+                    File out=new File(dest,entry.getName());
+                    String canonical=out.getCanonicalPath();
+                    if(!canonical.equals(dest.getCanonicalPath())&&!canonical.startsWith(root)) throw new ZipException("Unsafe archive path");
+                    if(entry.isDirectory()){if(!out.exists()&&!out.mkdirs())throw new IOException("Cannot create directory");}
+                    else{
+                        File parent=out.getParentFile(); if(parent!=null&&!parent.exists()&&!parent.mkdirs())throw new IOException("Cannot create parent");
+                        try(OutputStream os=new BufferedOutputStream(new FileOutputStream(out))){int n;while((n=zis.read(buf))>0)os.write(buf,0,n);}
+                    }
+                    zis.closeEntry();
+                }
+            }
+        }
+        void testZipAsync(File zip){
+            addNotification("Testing: "+zip.getName());
+            Executors.newSingleThreadExecutor().execute(()->{
+                boolean ok=false; String error=null;
+                try(ZipInputStream zis=new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))){
+                    byte[] buf=new byte[65536]; ZipEntry e; while((e=zis.getNextEntry())!=null){while(zis.read(buf)>0){} zis.closeEntry();} ok=true;
+                }catch(Exception e){error=e.getMessage();}
+                final boolean result=ok; final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->addNotification(result?"Archive OK: "+zip.getName():"Archive damaged"+(err==null?"":" : "+err)));
+            });
+        }
+        void shareFile(File f){
+            try{
+                Uri u=FileProvider.getUriForFile(MainActivity.this,"com.metmc.os.next.fileprovider",f);
+                Intent i=new Intent(Intent.ACTION_SEND); i.setType("application/octet-stream"); i.putExtra(Intent.EXTRA_STREAM,u);
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivity(Intent.createChooser(i,"Share "+f.getName()));
+            }catch(Exception e){addNotification("Share unavailable: "+e.getMessage());}
+        }
+        void showFileProperties(File f){
+            String type=f.isDirectory()?"Folder":(isArchiveFile(f)?"ZIP archive":"File");
+            String msg="Type: "+type+"\nSize: "+formatFileSize(f.isDirectory()?directorySize(f):f.length())+"\nModified: "+new Date(f.lastModified())+"\nPath: "+f.getAbsolutePath();
+            new AlertDialog.Builder(MainActivity.this).setTitle("Properties").setMessage(msg).setPositiveButton("OK",null).show();
+        }
+        long directorySize(File f){
+            long total=0; File[] children=f.listFiles();
+            if(children!=null) for(File child:children){ if(child.isDirectory()) total+=directorySize(child); else total+=child.length(); }
+            return total;
         }
 
         void drawWindowTaskbar(Canvas c,int w,int h){
@@ -1523,6 +1684,7 @@ public class MainActivity extends Activity {
             float x=e.getX(),y=e.getY();int h=getHeight(),w=getWidth();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;lastTouchY=y;
+                gestureMoved=false; pendingFilePath=null; pendingAppIndex=-1;
                 scrollingSurface=false;scrollingWindow=false;scrollingWindowTitle=null;
                 if(surface==Surface.DESKTOP){
                     // Shell chrome is a higher interaction layer than application windows.
@@ -1555,14 +1717,26 @@ public class MainActivity extends Activity {
                         }
                     }
                     WindowState files=windows.get("Files");
-                    WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
-                        if(y>=files.t+136-windowScroll&&y<=files.t+168-windowScroll){
-                            if(x>=files.l+28&&x<=files.l+118){ createFolder(); return true; }
-                            if(x>=files.l+124&&x<=files.l+196){ refreshFileEntries(); invalidate(); return true; }
+                    WindowState hit=windowAt(x,y);
+                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
+                        float toolbarTop=files.t+86-windowScroll;
+                        if(y>=toolbarTop&&y<=toolbarTop+32){
+                            if(x>=files.l+24&&x<=files.l+82){
+                                if(fileParentDirectory!=null){fileDirectory=fileParentDirectory;fileFilter="";refreshFileEntries();windowScroll=0;invalidate();}
+                                return true;
+                            }
+                            if(x>=files.l+88&&x<=files.l+158){createFolder();return true;}
+                            if(x>=files.l+164&&x<=files.l+238){
+                                File target=fileClipboardPath==null?null:new File(fileClipboardPath);
+                                if(target!=null&&target.exists()) compressZipAsync(target); else addNotification("Select a file or folder first");
+                                return true;
+                            }
+                            if(x>=files.l+244&&x<=files.l+318){fileSortMode=(fileSortMode+1)%3;refreshFileEntries();invalidate();return true;}
+                            if(x>=files.l+324&&x<=files.l+408){showHiddenFiles=!showHiddenFiles;refreshFileEntries();invalidate();return true;}
                         }
-                        float contentTop=files.t+174-windowScroll, contentBottom=files.b-12;
+                        float contentTop=files.t+128-windowScroll, contentBottom=files.b-12;
                         float available=Math.max(1,files.r-files.l-48);
-                        int columns=Math.max(2,Math.min(4,(int)(available/150f)));
+                        int columns=fileGridColumns(available);
                         float gap=10f,tileW=(available-gap*(columns-1))/columns,step=72f,tileH=62f;
                         if(x>=files.l+24&&x<=files.r-24&&y>=contentTop&&y<=contentBottom){
                             int col=(int)((x-(files.l+24))/(tileW+gap)), row=(int)((y-contentTop)/step);
@@ -1571,9 +1745,7 @@ public class MainActivity extends Activity {
                             ArrayList<String> entries=new ArrayList<>(fileEntries.values());
                             if(col>=0&&col<columns&&row>=0&&idx>=0&&idx<entries.size()
                                     &&x>=tileX&&x<=tileX+tileW&&y>=tileY&&y<=tileY+tileH){
-                                if(e.getEventTime()-e.getDownTime()>550) showFileActions(entries.get(idx));
-                                else openFileEntry(entries.get(idx));
-                                return true;
+                                pendingFilePath=entries.get(idx); return true;
                             }
                         }
                     }
@@ -1581,7 +1753,7 @@ public class MainActivity extends Activity {
                         if(!hit.title.equals(scrollingWindowTitle)) windowScroll=0;
                         bringToFront(hit.title);
                         float rr=hit.r,bb=hit.b;
-                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
+                        if(pendingAppIndex<0 && pendingFilePath==null && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
                             scrollingWindow=true; scrollingWindowTitle=hit.title;
                         }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
@@ -1640,20 +1812,7 @@ public class MainActivity extends Activity {
                             float cardX=hit.l+16+col*(cw+8), cardY=hit.t+62+row*116-windowScroll;
                             if(col>=0&&col<3&&row>=0&&ai>=0&&ai<6+androidApps.size()
                                     &&x>=cardX&&x<=cardX+cw&&y>=cardY&&y<=cardY+104){
-                                String[] appNames={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
-                                if(ai<appNames.length){
-                                    String a=appNames[ai];
-                                    if(a.equals("Terminal")) launchTerminal();
-                                    else if(a.equals("Browser")) launchBrowser();
-                                    else if(a.equals("Files")) showWindow("Files");
-                                    else if(a.equals("Settings")) showWindow("Settings");
-                                    else if(a.equals("Media")) showWindow("Media");
-                                    else showWindow("Linux Apps");
-                                } else {
-                                    ResolveInfo appInfo=androidApps.get(ai-appNames.length);
-                                    if(e.getEventTime()-e.getDownTime()>550) showAndroidAppActions(appInfo);
-                                    else launchAndroidApp(appInfo);
-                                }
+                                pendingAppIndex=ai;
                                 return true;
                             }
                             return true;
@@ -1770,6 +1929,13 @@ public class MainActivity extends Activity {
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 float dy=lastTouchY-y;
+                if(Math.abs(x-downX)>10 || Math.abs(y-downY)>10) gestureMoved=true;
+                if(pendingAppIndex>=0 && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>10){
+                    scrollingWindow=true; scrollingWindowTitle="Applications";
+                }
+                if(pendingFilePath!=null && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>10){
+                    scrollingWindow=true; scrollingWindowTitle="Files";
+                }
                 if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>10) scrollingSurface=true;
                 if(surface!=Surface.DESKTOP && scrollingSurface){
                     surfaceScroll+=dy; clampSurfaceScroll(); lastTouchY=y; invalidate(); return true;
@@ -1800,6 +1966,26 @@ public class MainActivity extends Activity {
                 return true;
             }
             if(e.getAction()==MotionEvent.ACTION_CANCEL||e.getAction()==MotionEvent.ACTION_UP){
+                if(e.getAction()==MotionEvent.ACTION_UP && pendingFilePath!=null && !gestureMoved && !scrollingWindow){
+                    String path=pendingFilePath; pendingFilePath=null;
+                    if(e.getEventTime()-e.getDownTime()>550) showFileActions(path); else openFileEntry(path);
+                    return true;
+                }
+                if(e.getAction()==MotionEvent.ACTION_UP && pendingAppIndex>=0 && !gestureMoved && !scrollingWindow){
+                    int ai=pendingAppIndex; pendingAppIndex=-1;
+                    String[] appNames={"Files","Terminal","Browser","Settings","Media","Linux Apps"};
+                    if(ai<appNames.length){
+                        String a=appNames[ai];
+                        if(a.equals("Terminal")) launchTerminal(); else if(a.equals("Browser")) launchBrowser();
+                        else if(a.equals("Files")) showWindow("Files"); else if(a.equals("Settings")) showWindow("Settings");
+                        else if(a.equals("Media")) showWindow("Media"); else showWindow("Linux Apps");
+                    } else if(ai<6+androidApps.size()) {
+                        ResolveInfo appInfo=androidApps.get(ai-appNames.length);
+                        if(e.getEventTime()-e.getDownTime()>550) showAndroidAppActions(appInfo); else launchAndroidApp(appInfo);
+                    }
+                    return true;
+                }
+                pendingFilePath=null; pendingAppIndex=-1;
                 if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; return true; }
                 if(scrollingWindow){ scrollingWindow=false; scrollingWindowTitle=null; return true; }
                 if(draggingWindow!=null){
