@@ -313,7 +313,7 @@ public class MainActivity extends Activity {
     void launchLinuxTool(String command) {
         desktop.showWindow("Terminal");
         buildTerminalOverlay();
-        syncTerminalOverlay();
+        desktop.syncTerminalOverlay();
         final boolean interactive = command.equals("vim") || command.equals("nano") || command.equals("htop") || command.equals("python3");
         startTerminalShell();
         final Handler handler = new Handler(Looper.getMainLooper());
