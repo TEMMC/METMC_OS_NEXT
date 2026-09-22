@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.rgb(5,8,12));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        hideSystemBars();
         prefs = getSharedPreferences("metmc", MODE_PRIVATE);
         root = new FrameLayout(this);
         desktop = new DesktopView(this);
@@ -49,10 +50,42 @@ public class MainActivity extends Activity {
         setContentView(root);
         requestNotificationPermission();
         if (desktop != null) desktop.restoreSession();
+        loadSavedWallpaper();
         if (SecurityStore.locked(this)) {
             startActivity(new Intent(this, LockScreenActivity.class));
         }
         new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
+    }
+
+    void hideSystemBars() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = getWindow().getInsetsController();
+            if (c != null) {
+                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                c.hide(WindowInsets.Type.systemBars());
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
+    }
+
+    void loadSavedWallpaper() {
+        try {
+            if (desktop == null || prefs.getInt("wallpaper",0) != 4 || desktop.customWallpaper != null) return;
+            String saved=prefs.getString("custom_wallpaper","");
+            if (saved.isEmpty()) return;
+            Uri u=Uri.parse(saved);
+            InputStream in=getContentResolver().openInputStream(u);
+            if(in!=null){ desktop.customWallpaper=BitmapFactory.decodeStream(in); in.close(); }
+        } catch(Exception ignored) {}
     }
 
     void requestNotificationPermission() {
@@ -151,11 +184,14 @@ public class MainActivity extends Activity {
         try {
             for (ApplicationInfo ai : pm.getInstalledApplications(PackageManager.MATCH_ALL)) {
                 if (getPackageName().equals(ai.packageName)) continue;
+                ResolveInfo r = new ResolveInfo();
+                r.activityInfo = new ActivityInfo();
+                r.activityInfo.applicationInfo = ai;
+                r.activityInfo.packageName = ai.packageName;
                 Intent li = pm.getLaunchIntentForPackage(ai.packageName);
-                if (li != null) {
-                    ResolveInfo r = pm.resolveActivity(li, PackageManager.MATCH_ALL);
-                    if (r != null) found.put(ai.packageName + "/" + r.activityInfo.name, r);
-                }
+                if (li != null && li.getComponent() != null) r.activityInfo.name = li.getComponent().getClassName();
+                else r.activityInfo.name = null;
+                found.put(ai.packageName, r);
             }
         } catch (Exception ignored) {}
         ArrayList<ResolveInfo> list = new ArrayList<>(found.values());
@@ -169,6 +205,12 @@ public class MainActivity extends Activity {
     }
 
     void launchAndroidApp(ResolveInfo info) {        try {
+            if (info.activityInfo.name == null || info.activityInfo.name.isEmpty()) {
+                Intent details = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + info.activityInfo.packageName));
+                startActivity(details);
+                return;
+            }
             Intent i = new Intent(Intent.ACTION_MAIN);
             i.addCategory(Intent.CATEGORY_LAUNCHER);
             i.setComponent(new ComponentName(info.activityInfo.packageName, info.activityInfo.name));
@@ -475,7 +517,7 @@ public class MainActivity extends Activity {
             return false;
         });
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
-        ip.leftMargin=148; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=54;
+        ip.leftMargin=140; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=54;
         root.addView(terminalInput,ip);
         terminalInput.requestFocus();
     }
@@ -943,6 +985,7 @@ public class MainActivity extends Activity {
             c.save();
             c.clipRect(0,54,w,h-82);
             for(String title:new ArrayList<>(openWindows)){
+                if (isDockApp(title)) continue;
                 WindowState ws=windows.get(title);
                 if(ws!=null && !ws.minimized) drawWindow(c,w,h,ws,title);
             }
@@ -1242,6 +1285,11 @@ public class MainActivity extends Activity {
             }
         }
 
+        boolean isDockApp(String title){
+            for(String a:dockApps) if(a.equals(title)) return true;
+            return false;
+        }
+
         void drawAppIconSimple(Canvas c,float x,float y){drawAppIcon(c,x,y,"Android");}
 
         @Override public boolean onTouchEvent(MotionEvent e){
@@ -1299,7 +1347,6 @@ public class MainActivity extends Activity {
                     if(hit!=null){
                         if(!hit.title.equals(scrollingWindowTitle)) windowScroll=0;
                         bringToFront(hit.title);
-                        if(hit.maximized) return true;
                         float rr=hit.r,bb=hit.b;
                         if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
                             scrollingWindow=true; scrollingWindowTitle=hit.title;
@@ -1322,11 +1369,24 @@ public class MainActivity extends Activity {
                             int row=(int)((y-(hit.t+70))/58f);
                             if(row>=0 && row<3){
                                 int qi=row*2+col;
-                                if(qi==0) wifiOn=!wifiOn;
-                                else if(qi==1) bluetoothOn=!bluetoothOn;
-                                else if(qi==2) soundOn=!soundOn;
-                                else if(qi==3) rotationOn=!rotationOn;
-                                else if(qi==4) darkMode=!darkMode;
+                                try {
+                                    if(qi==0){
+                                        wifiOn=true;
+                                        if(Build.VERSION.SDK_INT>=29) startActivity(new Intent(android.provider.Settings.Panel.ACTION_WIFI));
+                                        else startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));
+                                    } else if(qi==1){
+                                        startActivity(new Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS));
+                                    } else if(qi==2){
+                                        android.media.AudioManager am=(android.media.AudioManager)getSystemService(AUDIO_SERVICE);
+                                        if(am!=null){ am.adjustVolume(android.media.AudioManager.ADJUST_SAME, android.media.AudioManager.FLAG_SHOW_UI); soundOn=am.getRingerMode()!=android.media.AudioManager.RINGER_MODE_SILENT; }
+                                    } else if(qi==3){
+                                        rotationOn=!rotationOn;
+                                        setRequestedOrientation(rotationOn?android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED:android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+                                    } else if(qi==4){
+                                        darkMode=!darkMode;
+                                        if(Build.VERSION.SDK_INT>=29){ android.app.UiModeManager um=getSystemService(UiModeManager.class); if(um!=null) um.setNightMode(darkMode?UiModeManager.MODE_NIGHT_YES:UiModeManager.MODE_NIGHT_NO); }
+                                    }
+                                } catch(Exception ex){ addNotification("Quick setting unavailable: "+ex.getMessage()); }
                                 else if(qi==5) { lockDesktop(); return true; }
                                 addNotification(qi==5?"Desktop locked":"Quick setting changed");
                                 invalidate();
@@ -1418,7 +1478,12 @@ public class MainActivity extends Activity {
                             dragOffsetX=x-hit.l; dragOffsetY=y-hit.t;
                             return true;
                         }
-                        if(x>=rr-28&&y>=bb-28){ draggingWindow=hit.title; resizing=true; return true; }
+                        if(x>=rr-34&&y>=bb-34){
+                            if(hit.maximized){
+                                hit.l=hit.restoreL; hit.t=hit.restoreT; hit.r=hit.restoreR; hit.b=hit.restoreB; hit.maximized=false; clampWindow(hit);
+                            }
+                            draggingWindow=hit.title; resizing=true; return true;
+                        }
                         return true;
                     }
                     String task=windowTaskAt(x,y);
@@ -1660,14 +1725,14 @@ public class MainActivity extends Activity {
             ((View)terminalParent).setLayoutParams(sp);
 
             FrameLayout.LayoutParams pp=(FrameLayout.LayoutParams)terminalPrompt.getLayoutParams();
-            pp.width=126; pp.height=50;
+            pp.width=132; pp.height=50;
             pp.leftMargin=(int)ws.l+12; pp.topMargin=(int)ws.t+54;
             pp.rightMargin=0; pp.bottomMargin=0; pp.gravity=Gravity.TOP|Gravity.LEFT;
             terminalPrompt.setLayoutParams(pp);
 
             FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
             ip.width=Math.max(1,(int)(ws.r-ws.l-150)); ip.height=50;
-            ip.leftMargin=(int)ws.l+138; ip.topMargin=(int)ws.t+54;
+            ip.leftMargin=(int)ws.l+140; ip.topMargin=(int)ws.t+54;
             ip.rightMargin=0; ip.bottomMargin=0; ip.gravity=Gravity.TOP|Gravity.LEFT;
             terminalInput.setLayoutParams(ip);
         }
