@@ -29,12 +29,15 @@ public class MainActivity extends Activity {
     boolean interactiveTerminalMode=false;
     boolean suppressTerminalBridge=false;
     static final int PICK_WALLPAPER = 9001;
+    static final int PICK_MEDIA = 9002;
     static final String ROOTFS = "/data/local/linux/rootfs";
     static final String DEFAULT_SEARCH = "https://search.yahoo.com/search?p=";
     static final String DEFAULT_HOME = "https://search.yahoo.com/";
     android.content.SharedPreferences prefs;
     boolean sessionRestored = false;
     boolean internalTransition = false;
+    String fileClipboardPath = null;
+    boolean fileClipboardCut = false;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -97,7 +100,13 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { Uri u=data.getData(); try { getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",u.toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ InputStream in=getContentResolver().openInputStream(u); desktop.customWallpaper=BitmapFactory.decodeStream(in); if(in!=null) in.close(); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } } catch(Exception e) { Toast.makeText(this,"Wallpaper load failed: "+e.getMessage(),Toast.LENGTH_SHORT).show(); } }
+        if(requestCode==PICK_WALLPAPER && resultCode==RESULT_OK && data!=null && data.getData()!=null){ try { Uri u=data.getData(); try { getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch(Exception ignored) {} prefs.edit().putString("custom_wallpaper",u.toString()).putInt("wallpaper",4).apply(); if(desktop!=null){ InputStream in=getContentResolver().openInputStream(u); desktop.customWallpaper=BitmapFactory.decodeStream(in); if(in!=null) in.close(); desktop.surface=Surface.DESKTOP; desktop.invalidate(); } } catch(Exception e) { Toast.makeText(this,"Wallpaper load failed: "+e.getMessage(),Toast.LENGTH_SHORT).show(); } } else if(requestCode==PICK_MEDIA && resultCode==RESULT_OK && data!=null && data.getData()!=null){
+            try{
+                Intent i=new Intent(Intent.ACTION_VIEW,data.getData());
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                startActivity(i);
+            }catch(Exception e){ Toast.makeText(this,"No media viewer is available.",Toast.LENGTH_SHORT).show(); }
+        }
     }
 
     @Override protected void onPause() {
@@ -204,6 +213,21 @@ public class MainActivity extends Activity {
         return list;
     }
 
+    void showAndroidAppActions(ResolveInfo info){
+        final String pkg=info.activityInfo.packageName;
+        final PackageManager pm=getPackageManager();
+        String label=String.valueOf(info.loadLabel(pm));
+        String[] actions={"Open","App info","Force stop","Uninstall"};
+        new AlertDialog.Builder(this).setTitle(label).setItems(actions,(d,which)->{
+            try{
+                if(which==0) launchAndroidApp(info);
+                else if(which==1) startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+pkg)));
+                else if(which==2){ new ProcessBuilder("su","-c","am force-stop "+pkg).start(); addNotification("Force stop requested: "+label); }
+                else if(which==3) startActivity(new Intent(Intent.ACTION_DELETE,Uri.parse("package:"+pkg)));
+            }catch(Exception e){ addNotification("App action unavailable: "+e.getMessage()); }
+        }).show();
+    }
+
     void launchAndroidApp(ResolveInfo info) {        try {
             if (info.activityInfo.name == null || info.activityInfo.name.isEmpty()) {
                 Intent details = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -231,6 +255,16 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             new AlertDialog.Builder(this).setTitle("Android App").setMessage("Unable to open " + info.loadLabel(getPackageManager()) + "\n\n" + e.getMessage()).setPositiveButton("OK", null).show();
         }
+    }
+
+    void openMediaPicker(){
+        try{
+            Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"video/*","audio/*","image/*"});
+            startActivityForResult(i,PICK_MEDIA);
+        }catch(Exception e){ Toast.makeText(this,"Media picker unavailable.",Toast.LENGTH_SHORT).show(); }
     }
 
     void showGlobalSearch() {
@@ -1399,12 +1433,41 @@ public class MainActivity extends Activity {
 
         void showFileActions(String path){
             File f=new File(path);
-            String[] actions={"Open","Rename","Delete"};
+            String[] actions={"Open","Copy","Cut","Paste here","Rename","Delete"};
             new AlertDialog.Builder(MainActivity.this).setTitle(f.getName()).setItems(actions,(d,which)->{
                 if(which==0) openFileEntry(path);
-                else if(which==1) renameFileEntry(path);
+                else if(which==1){ fileClipboardPath=path; fileClipboardCut=false; addNotification("Copied: "+f.getName()); }
+                else if(which==2){ fileClipboardPath=path; fileClipboardCut=true; addNotification("Cut: "+f.getName()); }
+                else if(which==3) pasteFileEntry(fileDirectory);
+                else if(which==4) renameFileEntry(path);
                 else deleteFileEntry(path);
             }).show();
+        }
+
+        boolean copyRecursively(File src,File dst){
+            try{
+                if(src.isDirectory()){
+                    if(!dst.exists() && !dst.mkdirs()) return false;
+                    File[] children=src.listFiles();
+                    if(children!=null) for(File child:children) if(!copyRecursively(child,new File(dst,child.getName()))) return false;
+                    return true;
+                }
+                InputStream in=new FileInputStream(src); OutputStream out=new FileOutputStream(dst);
+                byte[] buf=new byte[65536]; int n;
+                while((n=in.read(buf))>0) out.write(buf,0,n);
+                in.close(); out.close(); return true;
+            }catch(Exception e){ return false; }
+        }
+
+        void pasteFileEntry(String destination){
+            if(fileClipboardPath==null){ addNotification("Nothing to paste"); return; }
+            File src=new File(fileClipboardPath), dir=new File(destination);
+            if(!src.exists()||!dir.isDirectory()){ addNotification("Paste source unavailable"); return; }
+            File dst=new File(dir,src.getName());
+            if(dst.exists()){ addNotification("Destination already exists"); return; }
+            boolean ok=fileClipboardCut ? src.renameTo(dst) : copyRecursively(src,dst);
+            addNotification(ok ? (fileClipboardCut?"Moved: ":"Copied: ")+src.getName() : "Paste failed");
+            if(ok){ fileClipboardPath=null; fileClipboardCut=false; refreshFileEntries(); invalidate(); }
         }
 
         void openFileEntry(String path){
@@ -1587,7 +1650,9 @@ public class MainActivity extends Activity {
                                     else if(a.equals("Media")) showWindow("Media");
                                     else showWindow("Linux Apps");
                                 } else {
-                                    launchAndroidApp(androidApps.get(ai-appNames.length));
+                                    ResolveInfo appInfo=androidApps.get(ai-appNames.length);
+                                    if(e.getEventTime()-e.getDownTime()>550) showAndroidAppActions(appInfo);
+                                    else launchAndroidApp(appInfo);
                                 }
                                 return true;
                             }
@@ -1640,7 +1705,7 @@ public class MainActivity extends Activity {
                             return true;
                         }
                         if("Media".equals(hit.title) && y>hit.t+125 && y<hit.b-10){
-                            showWindow("Files");
+                            openMediaPicker();
                             return true;
                         }
                         if("Clipboard".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
@@ -1655,7 +1720,7 @@ public class MainActivity extends Activity {
                             return true;
                         }
                         if("Media".equals(hit.title) && y>hit.t+125 && y<hit.b-10){
-                            showWindow("Files"); return true;
+                            openMediaPicker(); return true;
                         }
                         if("Wallpaper Manager".equals(hit.title) && y>hit.t+58 && y<hit.b-10){
                             int col=x < hit.l+(hit.r-hit.l)/2f ? 0 : 1;
