@@ -404,7 +404,7 @@ public class MainActivity extends Activity {
                         "mkdir -p \"$R/tmp\" \"$R/run\"; " +
                         "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
                         "export HOME=/root; export TERM=xterm-256color; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
-                        "export PS1='root@debian:~$ '; export PS2='> '; " +
+                        "export PS1=''; export PS2='> '; " +
                         "if test -x \"$R/usr/bin/script\"; then " +
                         "exec chroot \"$R\" /usr/bin/script -qefc '/bin/bash -l' /dev/null; " +
                         "else exec chroot \"$R\" /bin/bash -l; fi";
@@ -456,7 +456,7 @@ public class MainActivity extends Activity {
         terminalHistory.add(cmd);
         while (terminalHistory.size() > 100) terminalHistory.remove(0);
         terminalHistoryIndex = terminalHistory.size();
-        appendTerminal(cmd + "\n");
+        appendTerminal("root@debian:~# " + cmd + "\n");
         try {
             terminalStdin.write(cmd);
             terminalStdin.newLine();
@@ -466,6 +466,20 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             appendTerminal("[METMC] command input failed: " + e + "\n");
         }
+    }
+
+    void terminalCopySelected(){
+        if(terminalOutput!=null) terminalOutput.onTextContextMenuItem(android.R.id.copy);
+        else if(terminalInput!=null) terminalInput.onTextContextMenuItem(android.R.id.copy);
+    }
+    void terminalPaste(){
+        if(terminalInput!=null){ terminalInput.requestFocus(); terminalInput.onTextContextMenuItem(android.R.id.paste); }
+    }
+    void terminalSelectAll(){
+        if(terminalOutput!=null) terminalOutput.selectAll();
+    }
+    void terminalClearScreen(){
+        if(terminalOutput!=null){ terminalOutput.setText(""); terminalOutput.postInvalidate(); }
     }
 
     void terminalInterrupt() {
@@ -501,6 +515,10 @@ public class MainActivity extends Activity {
         terminalOutput.setIncludeFontPadding(false);
         terminalOutput.setPadding(14,10,14,10);
         terminalOutput.setGravity(Gravity.TOP|Gravity.START);
+        terminalOutput.setTextIsSelectable(true);
+        terminalOutput.setLongClickable(true);
+        terminalOutput.setTextIsSelectable(true);
+        terminalOutput.setOnLongClickListener(v -> { v.performLongClick(); return false; });
 
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(0xff080c0d);
@@ -509,19 +527,19 @@ public class MainActivity extends Activity {
         scroll.setScrollbarFadingEnabled(false);
         scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-2));
         FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
-        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=108; sp.bottomMargin=92;
+        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=108; sp.bottomMargin=146;
         root.addView(scroll, sp);
 
         terminalPrompt = new TextView(this);
-        terminalPrompt.setText("root@debian:~$");
+        terminalPrompt.setText("root@debian:~#");
         terminalPrompt.setTextColor(0xff39ff88);
         terminalPrompt.setTextSize(14);
         terminalPrompt.setTypeface(Typeface.MONOSPACE);
         terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
         terminalPrompt.setPadding(12,0,0,0);
         terminalPrompt.setBackgroundColor(0xff0d1418);
-        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(112,48);
-        pp.leftMargin=32; pp.gravity=Gravity.TOP; pp.topMargin=54;
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(132,48);
+        pp.leftMargin=32; pp.gravity=Gravity.BOTTOM; pp.bottomMargin=98;
         root.addView(terminalPrompt,pp);
 
         terminalInput = new EditText(this);
@@ -529,6 +547,9 @@ public class MainActivity extends Activity {
         terminalInput.setTextColor(Color.WHITE);
         terminalInput.setHintTextColor(0xff536575);
         terminalInput.setHint("type a command");
+        terminalInput.setTextIsSelectable(true);
+        terminalInput.setLongClickable(true);
+        terminalInput.setSelectAllOnFocus(false);
         terminalInput.setTextSize(14);
         terminalInput.setTypeface(Typeface.MONOSPACE);
         terminalInput.setIncludeFontPadding(false);
@@ -538,7 +559,6 @@ public class MainActivity extends Activity {
         terminalInput.setSingleLine(true);
         terminalInput.setHint("");
         terminalInput.setPadding(6,0,8,0);
-        terminalInput.setSelectAllOnFocus(false);
         terminalInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         terminalInput.setBackgroundColor(Color.TRANSPARENT);
         terminalInput.setOnEditorActionListener((v,id,event)->{
@@ -571,7 +591,7 @@ public class MainActivity extends Activity {
             return false;
         });
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
-        ip.leftMargin=140; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=54;
+        ip.leftMargin=164; ip.rightMargin=12; ip.gravity=Gravity.BOTTOM; ip.bottomMargin=98;
         root.addView(terminalInput,ip);
 
         // Termux-style terminal controls: always available above the Android IME.
@@ -597,6 +617,18 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams kb=new FrameLayout.LayoutParams(-1,88);
         kb.leftMargin=32; kb.rightMargin=32; kb.gravity=Gravity.BOTTOM;
         root.addView(terminalKeyBar,kb); terminalKeyBar.setVisibility(View.GONE);
+        terminalInput.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
+            public boolean onCreateActionMode(ActionMode mode,Menu menu){ return true; }
+            public boolean onPrepareActionMode(ActionMode mode,Menu menu){ return true; }
+            public boolean onActionItemClicked(ActionMode mode,MenuItem item){ return false; }
+            public void onDestroyActionMode(ActionMode mode){}
+        });
+        terminalOutput.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
+            public boolean onCreateActionMode(ActionMode mode,Menu menu){ return true; }
+            public boolean onPrepareActionMode(ActionMode mode,Menu menu){ return true; }
+            public boolean onActionItemClicked(ActionMode mode,MenuItem item){ return false; }
+            public void onDestroyActionMode(ActionMode mode){}
+        });
         terminalInput.requestFocus();
         terminalInput.postDelayed(()->{
             android.view.inputmethod.InputMethodManager imm=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
