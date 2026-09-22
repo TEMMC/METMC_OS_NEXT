@@ -632,7 +632,7 @@ public class MainActivity extends Activity {
         void resetSurfaceScroll(){ surfaceScroll=0; }
         float surfaceContentHeight(){
             if(surface==Surface.APPS) return 138f+(float)Math.ceil((6+androidApps.size())/3.0)*122f+90f;
-            if(surface==Surface.SETTINGS) return 136f+8f*57f+70f;
+            if(surface==Surface.SETTINGS) return 136f+12f*57f+70f;
             if(surface==Surface.NOTIFICATIONS) return 136f+Math.max(1,Math.min(30,notifications.size()))*42f+80f;
             if(surface==Surface.CLIPBOARD) return 136f+Math.max(1,Math.min(20,clipboardHistory.size()))*48f+80f;
             if(surface==Surface.WALLPAPER) return 140f+3f*150f+80f;
@@ -910,8 +910,8 @@ public class MainActivity extends Activity {
         void drawSettings(Canvas c,int w,int h){
             overlay(c,w,h); bold(c,"Settings",30,91,26,Color.WHITE);
             text(c,"METMC OS NEXT control center",30,116,12,0xff8f9bad);
-            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session"};
-            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart"};
+            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session","System Monitor","Process Manager","Power & Device","Accessibility"};
+            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart","CPU, RAM, storage, battery and network","Running Android/Linux processes","Power controls and Android device settings","Accessibility and input settings"};
             for(int i=0;i<groups.length;i++){
                 float y=136+i*57;
                 round(c,28,y,w-28,y+49,14,0xff151d27);
@@ -1041,7 +1041,8 @@ public class MainActivity extends Activity {
                 drawApplicationsWindowContent(c,l,t,rr,bb);
             } else if(title.equals("Quick Settings") || title.equals("Notifications")
                     || title.equals("Clipboard") || title.equals("Wallpaper Manager") || title.equals("Overview")
-                    || title.equals("Desktop & Workspaces") || title.equals("System Update") || title.equals("Session Manager")){
+                    || title.equals("Desktop & Workspaces") || title.equals("System Update") || title.equals("Session Manager")
+                    || title.equals("System Monitor") || title.equals("Process Manager") || title.equals("Power & Device") || title.equals("Accessibility")){
                 drawUtilityWindowContent(c,l,t,rr,bb,title);
             } else {
                 bold(c,title,l+28,t+82,20,Color.WHITE);
@@ -1062,7 +1063,7 @@ public class MainActivity extends Activity {
         }
 
         float windowContentHeight(String title,WindowState ws){
-            if("Settings".equals(title)) return 62f+8f*52f+40f;
+            if("Settings".equals(title)) return 62f+12f*52f+40f;
             if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+50f;
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
@@ -1074,6 +1075,10 @@ public class MainActivity extends Activity {
             if("Desktop & Workspaces".equals(title)) return 430f;
             if("System Update".equals(title)) return 300f;
             if("Session Manager".equals(title)) return 300f;
+            if("System Monitor".equals(title)) return 430f;
+            if("Process Manager".equals(title)) return 520f;
+            if("Power & Device".equals(title)) return 430f;
+            if("Accessibility".equals(title)) return 360f;
             return Math.max(1,ws.b-ws.t-70);
         }
         float windowScrollMax(String title,WindowState ws){ return Math.max(0,windowContentHeight(title,ws)-(ws.b-ws.t-62)); }
@@ -1214,6 +1219,30 @@ public class MainActivity extends Activity {
                 bold(c,"SAVE CURRENT SESSION",l+38,t+162,10,Color.WHITE);
                 round(c,l+22,t+192,r-22,t+240,10,0xff18212c);
                 bold(c,"RESTORE SAVED SESSION",l+38,t+222,10,Color.WHITE);
+            } else if(title.equals("System Monitor")){
+                drawSystemMonitor(c,l,t,r,b);
+            } else if(title.equals("Process Manager")){
+                drawProcessManager(c,l,t,r,b);
+            } else if(title.equals("Power & Device")){
+                bold(c,"Power & Device",l+28,t+82,20,Color.WHITE);
+                text(c,"Native Android device controls",l+28,t+107,11,0xff8f9cad);
+                String[] rows={"Android Settings","Battery Saver","Display","Sound","Network","Bluetooth"};
+                for(int i=0;i<rows.length;i++){
+                    float y=t+130+i*42;
+                    round(c,l+20,y,r-20,y+34,9,0xff18212c);
+                    text(c,rows[i],l+34,y+22,10,Color.WHITE);
+                    text(c,"OPEN",r-70,y+22,8,0xff39ff88);
+                }
+            } else if(title.equals("Accessibility")){
+                bold(c,"Accessibility",l+28,t+82,20,Color.WHITE);
+                text(c,"Android accessibility services and input support",l+28,t+107,11,0xff8f9cad);
+                String[] rows={"Accessibility Settings","Magnification","TalkBack / Screen Reader","Font & Display Size","Reduce Motion"};
+                for(int i=0;i<rows.length;i++){
+                    float y=t+130+i*42;
+                    round(c,l+20,y,r-20,y+34,9,0xff18212c);
+                    text(c,rows[i],l+34,y+22,10,Color.WHITE);
+                    text(c,"OPEN",r-70,y+22,8,0xff39ff88);
+                }
             } else if(title.equals("Overview")){
                 text(c,"Workspace "+currentWorkspace+"  •  "+openWindows.size()+" windows",l+20,t+76,10,0xff8f9bad);
                 for(int i=0;i<openWindows.size();i++){
@@ -1226,6 +1255,65 @@ public class MainActivity extends Activity {
                     text(c,windows.get(openWindows.get(i))!=null&&windows.get(openWindows.get(i)).minimized?"MIN":"OPEN",x+56,y+47,8,0xff39ff88);
                 }
             }
+        }
+
+        void drawSystemMonitor(Canvas c,float l,float t,float r,float b){
+            Runtime rt=Runtime.getRuntime();
+            long used=rt.totalMemory()-rt.freeMemory();
+            long max=rt.maxMemory();
+            StatFs sf=new StatFs("/storage/emulated/0");
+            long total=sf.getTotalBytes(), free=sf.getAvailableBytes();
+            BatteryManager bm=(BatteryManager)getSystemService(BATTERY_SERVICE);
+            int battery=bm!=null?bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY):-1;
+            bold(c,"System Monitor",l+28,t+82,20,Color.WHITE);
+            text(c,"Live native METMC device telemetry",l+28,t+107,11,0xff8f9cad);
+            String[][] rows={{"Memory",formatBytes(used)+" / "+formatBytes(max)},
+                    {"Storage",formatBytes(total-free)+" / "+formatBytes(total)},
+                    {"Battery",battery>=0?battery+"%":"Unavailable"},
+                    {"CPU cores",String.valueOf(rt.availableProcessors())},
+                    {"Runtime","Android "+Build.VERSION.RELEASE+" • API "+Build.VERSION.SDK_INT}};
+            for(int i=0;i<rows.length;i++){
+                float y=t+130+i*48;
+                round(c,l+20,y,r-20,y+40,10,0xff18212c);
+                text(c,rows[i][0],l+34,y+17,9,0xff8f9cad);
+                bold(c,rows[i][1],l+34,y+32,11,Color.WHITE);
+            }
+            postInvalidateDelayed(1000);
+        }
+
+        String formatBytes(long v){
+            if(v<1024) return v+" B";
+            double x=v/1024.0;
+            if(x<1024) return String.format(Locale.US,"%.1f KB",x);
+            x/=1024.0;
+            if(x<1024) return String.format(Locale.US,"%.1f MB",x);
+            return String.format(Locale.US,"%.1f GB",x/1024.0);
+        }
+
+        void drawProcessManager(Canvas c,float l,float t,float r,float b){
+            bold(c,"Process Manager",l+28,t+82,20,Color.WHITE);
+            text(c,"Android and root-visible Linux processes",l+28,t+107,11,0xff8f9cad);
+            File proc=new File("/proc");
+            File[] entries=proc.listFiles(f -> f.isDirectory() && f.getName().matches("\\d+"));
+            if(entries==null){ text(c,"Process information unavailable.",l+28,t+145,11,0xffff9a9a); return; }
+            Arrays.sort(entries,(a,z)->Integer.compare(Integer.parseInt(a.getName()),Integer.parseInt(z.getName())));
+            int shown=0;
+            for(File e:entries){
+                if(shown>=10) break;
+                String pid=e.getName(), name=pid;
+                try{
+                    BufferedReader br=new BufferedReader(new FileReader(new File(e,"cmdline")));
+                    String s=br.readLine(); br.close();
+                    if(s!=null&&!s.trim().isEmpty()) name=s.replace("\0"," ").trim();
+                }catch(Exception ignored){}
+                if(name.length()>42) name=name.substring(0,39)+"...";
+                float y=t+130+shown*38;
+                round(c,l+20,y,r-20,y+31,8,0xff18212c);
+                text(c,pid,l+32,y+20,9,0xff39ff88);
+                text(c,name,l+78,y+20,9,Color.WHITE);
+                shown++;
+            }
+            if(shown==0) text(c,"No process entries available.",l+28,t+145,11,0xffff9a9a);
         }
 
         void drawFileWindowPreview(Canvas c,float l,float t,float r,float b){
@@ -1364,12 +1452,17 @@ public class MainActivity extends Activity {
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62)+windowScroll)/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
+                            else if(setting==1) showWindow("Desktop & Workspaces");
                             else if(setting==2) { refreshAndroidApps(); showWindow("Applications"); }
                             else if(setting==3) showWindow("Linux Apps");
                             else if(setting==4) openSecurity();
                             else if(setting==5) new Updater(MainActivity.this).check();
                             else if(setting==6) showWindow("Clipboard");
                             else if(setting==7) { saveSession(); addNotification("Session saved"); }
+                            else if(setting==8) showWindow("System Monitor");
+                            else if(setting==9) showWindow("Process Manager");
+                            else if(setting==10) showWindow("Power & Device");
+                            else if(setting==11) showWindow("Accessibility");
                             invalidate();
                             return true;
                         }
@@ -1435,6 +1528,23 @@ public class MainActivity extends Activity {
                             int li=row*2+col;
                             String[] cmds={"python3","vim","nano","htop","bash","python3"};
                             if(li>=0 && li<cmds.length){ launchLinuxTool(cmds[li]); return true; }
+                            return true;
+                        }
+                        if("Power & Device".equals(hit.title) && y>hit.t+120 && y<hit.b-10){
+                            int row=(int)((y-(hit.t+130)+windowScroll)/42f);
+                            try{
+                                if(row==0) startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS));
+                                else if(row==1) startActivity(new Intent(android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS));
+                                else if(row==2) startActivity(new Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS));
+                                else if(row==3) startActivity(new Intent(android.provider.Settings.ACTION_SOUND_SETTINGS));
+                                else if(row==4) startActivity(new Intent(android.provider.Settings.ACTION_WIFI_SETTINGS));
+                                else if(row==5) startActivity(new Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS));
+                            }catch(Exception ex){ addNotification("Device setting unavailable"); }
+                            return true;
+                        }
+                        if("Accessibility".equals(hit.title) && y>hit.t+120 && y<hit.b-10){
+                            try{ startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)); }
+                            catch(Exception ex){ addNotification("Accessibility settings unavailable"); }
                             return true;
                         }
                         if("Media".equals(hit.title) && y>hit.t+125 && y<hit.b-10){
@@ -1635,7 +1745,14 @@ public class MainActivity extends Activity {
             }
 
             if(surface==Surface.SETTINGS){
-                for(int i=0;i<8;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){if(i==0)showWindow("Wallpaper Manager");else if(i==1)showWindow("Desktop & Workspaces");else if(i==2)showWindow("Applications");else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();else if(i==5)showWindow("System Update");else if(i==6)showWindow("Clipboard");else if(i==7)showWindow("Session Manager");invalidate();return true;}}
+                for(int i=0;i<12;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){
+                    if(i==0)showWindow("Wallpaper Manager");else if(i==1)showWindow("Desktop & Workspaces");
+                    else if(i==2)showWindow("Applications");else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();
+                    else if(i==5)showWindow("System Update");else if(i==6)showWindow("Clipboard");else if(i==7)showWindow("Session Manager");
+                    else if(i==8)showWindow("System Monitor");else if(i==9)showWindow("Process Manager");
+                    else if(i==10)showWindow("Power & Device");else if(i==11)showWindow("Accessibility");
+                    invalidate();return true;
+                }}
             }
 
             return true;
