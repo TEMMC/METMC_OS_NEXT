@@ -231,9 +231,9 @@ public class MainActivity extends Activity {
             try{
                 if(which==0) launchAndroidApp(info);
                 else if(which==1) startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+pkg)));
-                else if(which==2){ new ProcessBuilder("su","-c","am force-stop "+pkg).start(); addNotification("Force stop requested: "+label); }
+                else if(which==2){ new ProcessBuilder("su","-c","am force-stop "+pkg).start(); desktop.addNotification("Force stop requested: "+label); }
                 else if(which==3) startActivity(new Intent(Intent.ACTION_DELETE,Uri.parse("package:"+pkg)));
-            }catch(Exception e){ addNotification("App action unavailable: "+e.getMessage()); }
+            }catch(Exception e){ if(desktop!=null) desktop.addNotification("App action unavailable: "+e.getMessage()); }
         }).show();
     }
 
