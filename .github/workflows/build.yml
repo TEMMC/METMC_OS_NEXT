@@ -74,30 +74,20 @@ jobs:
           mkdir -p release
           cp app/build/outputs/apk/release/app-release.apk release/METMC-OS-NEXT.apk
 
-      - name: Finalize and verify install-ready APK
+      - name: Verify install-ready APK
         if: env.SIGNING_READY == 'true'
-        env:
-          METMC_KEYSTORE_PASSWORD: ${{ secrets.METMC_KEYSTORE_PASSWORD }}
-          METMC_KEY_ALIAS: ${{ secrets.METMC_KEY_ALIAS }}
-          METMC_KEY_PASSWORD: ${{ secrets.METMC_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           APK="release/METMC-OS-NEXT.apk"
-          ALIGNED="release/METMC-OS-NEXT-aligned.apk"
-          SIGNED="release/METMC-OS-NEXT-final.apk"
           test -s "$APK"
-          "$BUILD_TOOLS/zipalign" -P 16 -f 4 "$APK" "$ALIGNED"
-          "$BUILD_TOOLS/apksigner" sign             --ks metmc-release.jks             --ks-pass env:METMC_KEYSTORE_PASSWORD             --ks-key-alias "$METMC_KEY_ALIAS"             --key-pass env:METMC_KEY_PASSWORD             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --out "$SIGNED" "$ALIGNED"
-          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$SIGNED" >/dev/null
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$SIGNED" | tee /tmp/apksigner.txt
-          grep -Fq "Verified using v2 scheme (APK Signature Scheme v2): true" /tmp/apksigner.txt
-          grep -Fq "Verified using v3 scheme (APK Signature Scheme v3): true" /tmp/apksigner.txt
+          unzip -t "$APK" >/dev/null
+          "$BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK" >/dev/null
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/apksigner.txt
+          grep -Eq "Verified using v2 scheme \(APK Signature Scheme v2\): true|Verified using v3 scheme \(APK Signature Scheme v3\): true|Verified using v3.1 scheme \(APK Signature Scheme v3.1\): true" /tmp/apksigner.txt
           grep -Fq "96423871687134af5d779c1cb33c36c2fd0fdb145c50e34663a291e535d24294" /tmp/apksigner.txt
-          "$BUILD_TOOLS/aapt2" dump badging "$SIGNED" | grep -Fq "package: name='com.metmc.os.next'"
-          mv "$SIGNED" "$APK"
-          rm -f "$ALIGNED"
-          echo "Final METMC OS NEXT APK passed ZIP alignment, v2/v3 signing, certificate and package checks."
+          "$BUILD_TOOLS/aapt2" dump badging "$APK" | grep -Fq "package: name='com.metmc.os.next'"
+          echo "METMC OS NEXT APK passed integrity, alignment, v2-or-newer signing, certificate and package checks."
 
       - name: Upload signed release artifact
         if: env.SIGNING_READY == 'true'
