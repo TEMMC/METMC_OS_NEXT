@@ -1397,7 +1397,7 @@ public class MainActivity extends Activity {
                                         if(Build.VERSION.SDK_INT>=29){ android.app.UiModeManager um=getSystemService(UiModeManager.class); if(um!=null) um.setNightMode(darkMode?UiModeManager.MODE_NIGHT_YES:UiModeManager.MODE_NIGHT_NO); }
                                     }
                                 } catch(Exception ex){ addNotification("Quick setting unavailable: "+ex.getMessage()); }
-                                else if(qi==5) { lockDesktop(); return true; }
+                                if(qi==5) { lockDesktop(); return true; }
                                 addNotification(qi==5?"Desktop locked":"Quick setting changed");
                                 invalidate();
                             }
