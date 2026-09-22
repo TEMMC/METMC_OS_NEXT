@@ -1613,7 +1613,7 @@ public class MainActivity extends Activity {
                                     new AlertDialog.Builder(MainActivity.this).setTitle("Process "+pid)
                                             .setMessage("Terminate this process? Root access is required.")
                                             .setNegativeButton("Cancel",null)
-                                            .setPositiveButton("Kill",(d,w)->{
+                                            .setPositiveButton("Kill",(dialog,button)->{
                                                 try{ new ProcessBuilder("su","-c","kill -9 "+pid).start(); addNotification("Kill requested for PID "+pid); }
                                                 catch(Exception ex){ addNotification("Kill failed: "+ex.getMessage()); }
                                                 invalidate();
