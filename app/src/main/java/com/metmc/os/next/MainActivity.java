@@ -57,6 +57,9 @@ public class MainActivity extends Activity {
         desktop = new DesktopView(this);
         root.addView(desktop, new FrameLayout.LayoutParams(-1,-1));
         setContentView(root);
+        root.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if(terminalKeyBar!=null && terminalKeyBar.getVisibility()==View.VISIBLE && desktop!=null) desktop.syncTerminalOverlay();
+        });
         requestNotificationPermission();
         if (desktop != null) desktop.restoreSession();
         loadSavedWallpaper();
@@ -596,7 +599,7 @@ public class MainActivity extends Activity {
         root.addView(terminalKeyBar,kb); terminalKeyBar.setVisibility(View.GONE);
         terminalInput.requestFocus();
         terminalInput.postDelayed(()->{
-            InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+            android.view.inputmethod.InputMethodManager imm=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
             if(imm!=null) imm.showSoftInput(terminalInput,InputMethodManager.SHOW_IMPLICIT);
         },180);
     }
