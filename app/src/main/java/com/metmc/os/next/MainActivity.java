@@ -1320,7 +1320,11 @@ public class MainActivity extends Activity {
             c.save();
             c.clipRect(l+18,t+118,r-18,b-12);
             text(c,"PATH  "+fileDirectory,l+28,t+128,10,0xff6f8296);
-            float contentTop=t+142;
+            round(c,l+28,t+136,l+118,t+164,8,0xff294b39);
+            text(c,"NEW FOLDER",l+38,t+154,8,Color.WHITE);
+            round(c,l+124,t+136,l+196,t+164,8,0xff202a35);
+            text(c,"REFRESH",l+138,t+154,8,Color.WHITE);
+            float contentTop=t+174;
             float available=Math.max(1,r-l-48);
             int columns=Math.max(2,Math.min(4,(int)(available/150f)));
             float gap=10f, tileW=(available-gap*(columns-1))/columns;
@@ -1339,6 +1343,68 @@ public class MainActivity extends Activity {
                 text(c,f.isDirectory()?"FOLDER":"FILE",x+58,yy+44,8,0xff7f9b8b);
             }
             c.restore();
+        }
+
+        void createFolder(){
+            final EditText input=new EditText(MainActivity.this);
+            input.setSingleLine(true); input.setHint("Folder name");
+            new AlertDialog.Builder(MainActivity.this).setTitle("New folder").setView(input)
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Create",(d,w)->{
+                        String n=input.getText().toString().trim();
+                        if(n.isEmpty()) return;
+                        File f=new File(fileDirectory,n);
+                        try{ if(f.mkdir()) addNotification("Folder created: "+n); else addNotification("Could not create folder"); }
+                        catch(Exception e){ addNotification("Create failed: "+e.getMessage()); }
+                        refreshFileEntries(); invalidate();
+                    }).show();
+        }
+
+        void renameFileEntry(String path){
+            File old=new File(path);
+            final EditText input=new EditText(MainActivity.this);
+            input.setSingleLine(true); input.setText(old.getName());
+            new AlertDialog.Builder(MainActivity.this).setTitle("Rename").setView(input)
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Rename",(d,w)->{
+                        String n=input.getText().toString().trim();
+                        if(n.isEmpty()) return;
+                        try{ if(old.renameTo(new File(old.getParentFile(),n))) addNotification("Renamed "+old.getName()); else addNotification("Rename failed"); }
+                        catch(Exception e){ addNotification("Rename failed: "+e.getMessage()); }
+                        refreshFileEntries(); invalidate();
+                    }).show();
+        }
+
+        void deleteFileEntry(String path){
+            File f=new File(path);
+            new AlertDialog.Builder(MainActivity.this).setTitle("Delete")
+                    .setMessage("Delete "+f.getName()+"?")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Delete",(d,w)->{
+                        try{
+                            if(deleteRecursively(f)) addNotification("Deleted "+f.getName());
+                            else addNotification("Delete failed");
+                        }catch(Exception e){ addNotification("Delete failed: "+e.getMessage()); }
+                        refreshFileEntries(); invalidate();
+                    }).show();
+        }
+
+        boolean deleteRecursively(File f){
+            if(f.isDirectory()){
+                File[] children=f.listFiles();
+                if(children!=null) for(File child:children) if(!deleteRecursively(child)) return false;
+            }
+            return f.delete();
+        }
+
+        void showFileActions(String path){
+            File f=new File(path);
+            String[] actions={"Open","Rename","Delete"};
+            new AlertDialog.Builder(MainActivity.this).setTitle(f.getName()).setItems(actions,(d,which)->{
+                if(which==0) openFileEntry(path);
+                else if(which==1) renameFileEntry(path);
+                else deleteFileEntry(path);
+            }).show();
         }
 
         void openFileEntry(String path){
@@ -1427,7 +1493,11 @@ public class MainActivity extends Activity {
                     }
                     WindowState files=windows.get("Files");
                     WindowState hit=windowAt(x,y);                    if(hit!=null && "Files".equals(hit.title) && files!=null&&!files.minimized){
-                        float contentTop=files.t+142-windowScroll, contentBottom=files.b-12;
+                        if(y>=files.t+136-windowScroll&&y<=files.t+168-windowScroll){
+                            if(x>=files.l+28&&x<=files.l+118){ createFolder(); return true; }
+                            if(x>=files.l+124&&x<=files.l+196){ refreshFileEntries(); invalidate(); return true; }
+                        }
+                        float contentTop=files.t+174-windowScroll, contentBottom=files.b-12;
                         float available=Math.max(1,files.r-files.l-48);
                         int columns=Math.max(2,Math.min(4,(int)(available/150f)));
                         float gap=10f,tileW=(available-gap*(columns-1))/columns,step=72f,tileH=62f;
@@ -1438,7 +1508,9 @@ public class MainActivity extends Activity {
                             ArrayList<String> entries=new ArrayList<>(fileEntries.values());
                             if(col>=0&&col<columns&&row>=0&&idx>=0&&idx<entries.size()
                                     &&x>=tileX&&x<=tileX+tileW&&y>=tileY&&y<=tileY+tileH){
-                                openFileEntry(entries.get(idx)); return true;
+                                if(e.getEventTime()-e.getDownTime()>550) showFileActions(entries.get(idx));
+                                else openFileEntry(entries.get(idx));
+                                return true;
                             }
                         }
                     }
@@ -1528,6 +1600,26 @@ public class MainActivity extends Activity {
                             int li=row*2+col;
                             String[] cmds={"python3","vim","nano","htop","bash","python3"};
                             if(li>=0 && li<cmds.length){ launchLinuxTool(cmds[li]); return true; }
+                            return true;
+                        }
+                        if("Process Manager".equals(hit.title) && y>hit.t+120 && y<hit.b-10){
+                            int row=(int)((y-(hit.t+130)+windowScroll)/38f);
+                            File proc=new File("/proc");
+                            File[] entries=proc.listFiles(f -> f.isDirectory() && f.getName().matches("\\d+"));
+                            if(entries!=null){
+                                Arrays.sort(entries,(a,z)->Integer.compare(Integer.parseInt(a.getName()),Integer.parseInt(z.getName())));
+                                if(row>=0&&row<Math.min(10,entries.length)){
+                                    String pid=entries[row].getName();
+                                    new AlertDialog.Builder(MainActivity.this).setTitle("Process "+pid)
+                                            .setMessage("Terminate this process? Root access is required.")
+                                            .setNegativeButton("Cancel",null)
+                                            .setPositiveButton("Kill",(d,w)->{
+                                                try{ new ProcessBuilder("su","-c","kill -9 "+pid).start(); addNotification("Kill requested for PID "+pid); }
+                                                catch(Exception ex){ addNotification("Kill failed: "+ex.getMessage()); }
+                                                invalidate();
+                                            }).show();
+                                }
+                            }
                             return true;
                         }
                         if("Power & Device".equals(hit.title) && y>hit.t+120 && y<hit.b-10){
