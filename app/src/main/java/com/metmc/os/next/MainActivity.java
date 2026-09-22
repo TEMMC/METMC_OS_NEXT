@@ -985,7 +985,6 @@ public class MainActivity extends Activity {
             c.save();
             c.clipRect(0,54,w,h-82);
             for(String title:new ArrayList<>(openWindows)){
-                if (isDockApp(title)) continue;
                 WindowState ws=windows.get(title);
                 if(ws!=null && !ws.minimized) drawWindow(c,w,h,ws,title);
             }
@@ -1642,6 +1641,7 @@ public class MainActivity extends Activity {
         String windowTaskAt(float x,float y){
             float tx=24,ty=getHeight()-126;
             for(String title:new ArrayList<>(openWindows)){
+                if(isDockApp(title)) continue;
                 WindowState ws=windows.get(title);
                 if(ws==null)continue;
                 float bw=Math.min(150,Math.max(92,title.length()*8f+58));
