@@ -30,6 +30,7 @@ public class MainActivity extends Activity {
     int terminalHistoryIndex = -1;
     java.lang.Process terminalShell;
     LinearLayout terminalToolbar;
+    LinearLayout terminalKeyBar;
     boolean interactiveTerminalMode=false;
     boolean suppressTerminalBridge=false;
     static final int PICK_WALLPAPER = 9001;
@@ -46,6 +47,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.rgb(5,8,12));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
@@ -568,7 +570,61 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
         ip.leftMargin=140; ip.rightMargin=12; ip.gravity=Gravity.TOP; ip.topMargin=54;
         root.addView(terminalInput,ip);
+
+        // Termux-style terminal controls: always available above the Android IME.
+        terminalKeyBar=new LinearLayout(this);
+        terminalKeyBar.setOrientation(LinearLayout.VERTICAL);
+        terminalKeyBar.setPadding(4,3,4,3);
+        terminalKeyBar.setBackgroundColor(0xff10161d);
+        String[][] rows={{"ESC","TAB","↑","HOME","END","PGUP"},{"CTRL","ALT","←","↓","→","PGDN"}};
+        for(String[] row:rows){
+            LinearLayout line=new LinearLayout(this);
+            line.setOrientation(LinearLayout.HORIZONTAL);
+            for(String label:row){
+                TextView key=new TextView(this);
+                key.setText(label); key.setTextColor(0xffe8edf3); key.setTextSize(11);
+                key.setTypeface(Typeface.DEFAULT,Typeface.BOLD); key.setGravity(Gravity.CENTER);
+                key.setBackgroundColor(0xff1b242e); key.setPadding(3,0,3,0);
+                LinearLayout.LayoutParams kp=new LinearLayout.LayoutParams(0,34,1f);
+                kp.setMargins(3,2,3,2); line.addView(key,kp);
+                key.setOnClickListener(v->sendTerminalSpecialKey(label));
+            }
+            terminalKeyBar.addView(line,new LinearLayout.LayoutParams(-1,40));
+        }
+        FrameLayout.LayoutParams kb=new FrameLayout.LayoutParams(-1,88);
+        kb.leftMargin=32; kb.rightMargin=32; kb.gravity=Gravity.BOTTOM;
+        root.addView(terminalKeyBar,kb); terminalKeyBar.setVisibility(View.GONE);
         terminalInput.requestFocus();
+        terminalInput.postDelayed(()->{
+            InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+            if(imm!=null) imm.showSoftInput(terminalInput,InputMethodManager.SHOW_IMPLICIT);
+        },180);
+    }
+
+    void sendTerminalSpecialKey(String label){
+        if(terminalInput==null)return;
+        terminalInput.requestFocus();
+        String seq=null;
+        if("ESC".equals(label))seq="\\u001b";
+        else if("TAB".equals(label))seq="\\t";
+        else if("↑".equals(label))seq="\\u001b[A";
+        else if("↓".equals(label))seq="\\u001b[B";
+        else if("→".equals(label))seq="\\u001b[C";
+        else if("←".equals(label))seq="\\u001b[D";
+        else if("HOME".equals(label))seq="\\u001b[H";
+        else if("END".equals(label))seq="\\u001b[F";
+        else if("PGUP".equals(label))seq="\\u001b[5~";
+        else if("PGDN".equals(label))seq="\\u001b[6~";
+        else if("CTRL".equals(label)){if(interactiveTerminalMode)seq="\\u0001";else{terminalHistoryMove(-1);return;}}
+        else if("ALT".equals(label))seq="\\u001b";
+        if(seq==null)return;
+        if(interactiveTerminalMode){
+            try{if(terminalStdin!=null){terminalStdin.write(seq);terminalStdin.flush();}}catch(Exception e){appendTerminal("\\n[METMC] key input failed: "+e+"\\n");}
+            return;
+        }
+        if("↑".equals(label)){terminalHistoryMove(-1);return;}
+        if("↓".equals(label)){terminalHistoryMove(1);return;}
+        if("TAB".equals(label)){terminalInput.append("\\t");return;}
     }
     void removeTerminalOverlay() {
         if (terminalInput != null) {
@@ -580,6 +636,10 @@ public class MainActivity extends Activity {
             terminalPrompt=null;
         }
         if (terminalOutput != null) {
+            if(terminalKeyBar!=null){
+                ViewParent kp=terminalKeyBar.getParent(); if(kp instanceof ViewGroup)((ViewGroup)kp).removeView(terminalKeyBar);
+                terminalKeyBar=null;
+            }
             ViewParent p=terminalOutput.getParent();
             if(p instanceof ViewGroup) {
                 ViewGroup parent=(ViewGroup)p;
@@ -2176,6 +2236,7 @@ public class MainActivity extends Activity {
             if(terminalPrompt!=null)terminalPrompt.setVisibility(View.GONE);
             if(terminalInput!=null)terminalInput.setVisibility(View.GONE);
             if(terminalOutput!=null&&terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.GONE);
+            if(terminalKeyBar!=null)terminalKeyBar.setVisibility(View.GONE);
         }
 
         void syncTerminalOverlay(){
@@ -2185,6 +2246,7 @@ public class MainActivity extends Activity {
             terminalPrompt.setVisibility(View.VISIBLE);
             terminalInput.setVisibility(View.VISIBLE);
             if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
+            if(terminalKeyBar!=null)terminalKeyBar.setVisibility(View.VISIBLE);
 
             ViewParent terminalParent=terminalOutput.getParent();
             FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
@@ -2206,6 +2268,17 @@ public class MainActivity extends Activity {
             ip.leftMargin=(int)ws.l+140; ip.topMargin=(int)ws.t+54;
             ip.rightMargin=0; ip.bottomMargin=0; ip.gravity=Gravity.TOP|Gravity.LEFT;
             terminalInput.setLayoutParams(ip);
+            if(terminalKeyBar!=null){
+                FrameLayout.LayoutParams kb=(FrameLayout.LayoutParams)terminalKeyBar.getLayoutParams();
+                kb.width=Math.max(1,(int)(ws.r-ws.l-24));
+                kb.height=88;
+                kb.leftMargin=(int)ws.l+12;
+                kb.rightMargin=0;
+                kb.topMargin=Math.max((int)ws.t+106,root.getHeight()-88);
+                kb.bottomMargin=0;
+                kb.gravity=Gravity.TOP|Gravity.LEFT;
+                terminalKeyBar.setLayoutParams(kb);
+            }
         }
         void showWindow(String name){
             if("Files".equals(name) && android.os.Build.VERSION.SDK_INT>=30 && !android.os.Environment.isExternalStorageManager()){
