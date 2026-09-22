@@ -312,18 +312,29 @@ public class MainActivity extends Activity {
 
     void launchLinuxTool(String command) {
         desktop.showWindow("Terminal");
-        interactiveTerminalMode = command.equals("vim") || command.equals("nano") || command.equals("htop") || command.equals("python3");
+        buildTerminalOverlay();
+        syncTerminalOverlay();
+        final boolean interactive = command.equals("vim") || command.equals("nano") || command.equals("htop") || command.equals("python3");
         startTerminalShell();
         final Handler handler = new Handler(Looper.getMainLooper());
-        final long deadline = SystemClock.uptimeMillis() + 5000;
+        final long deadline = SystemClock.uptimeMillis() + 8000;
         Runnable send = new Runnable() {
             @Override public void run() {
                 if (terminalStdin != null && terminalShell != null && terminalShell.isAlive()) {
-                    suppressTerminalBridge=true;
-                    terminalInput.setText(command);
-                    suppressTerminalBridge=false;
-                    sendTerminalCommand();
-                    terminalInput.requestFocus();
+                    try {
+                        terminalStdin.write(command);
+                        terminalStdin.newLine();
+                        terminalStdin.flush();
+                        interactiveTerminalMode = interactive;
+                        if (terminalInput != null) {
+                            suppressTerminalBridge=true;
+                            terminalInput.setText("");
+                            suppressTerminalBridge=false;
+                            terminalInput.requestFocus();
+                        }
+                    } catch(Exception e) {
+                        appendTerminal("\n[METMC] Could not start Linux program: "+e+"\n");
+                    }
                 } else if (SystemClock.uptimeMillis() < deadline) {
                     handler.postDelayed(this, 150);
                 } else {
