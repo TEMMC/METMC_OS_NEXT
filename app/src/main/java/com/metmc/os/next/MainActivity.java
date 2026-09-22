@@ -160,7 +160,7 @@ public class MainActivity extends Activity {
         if (desktop.surface != Surface.DESKTOP) {
             desktop.surface = Surface.DESKTOP;
             desktop.invalidate();
-            syncTerminalOverlay();
+            desktop.syncTerminalOverlay();
             return;
         }
         if (desktop.activeWindow != null) {
