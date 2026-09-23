@@ -1815,8 +1815,10 @@ public class MainActivity extends Activity {
                         if(!hit.title.equals(scrollingWindowTitle)) windowScroll=0;
                         bringToFront(hit.title);
                         float rr=hit.r,bb=hit.b;
-                        if(pendingAppIndex<0 && pendingFilePath==null && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
-                            scrollingWindow=true; scrollingWindowTitle=hit.title;
+                        // Remember which window can scroll, but do not mark it as scrolling until
+                        // the finger actually moves. This keeps taps distinct from swipes.
+                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
+                            scrollingWindowTitle=hit.title;
                         }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62)+windowScroll)/52f);
@@ -1993,11 +1995,8 @@ public class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 float dy=lastTouchY-y;
                 if(Math.abs(x-downX)>6 || Math.abs(y-downY)>6) gestureMoved=true;
-                if(pendingAppIndex>=0 && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>6){
-                    scrollingWindow=true; scrollingWindowTitle="Applications";
-                }
-                if(pendingFilePath!=null && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>6){
-                    scrollingWindow=true; scrollingWindowTitle="Files";
+                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){
+                    scrollingWindow=true;
                 }
                 if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>6) scrollingSurface=true;
                 if(surface!=Surface.DESKTOP && scrollingSurface){
