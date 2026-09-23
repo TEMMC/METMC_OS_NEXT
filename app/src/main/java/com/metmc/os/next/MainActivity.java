@@ -69,7 +69,7 @@ public class MainActivity extends Activity {
         if (SecurityStore.locked(this)) {
             startActivity(new Intent(this, LockScreenActivity.class));
         }
-        new Handler().postDelayed(() -> new Updater(MainActivity.this).check(), 2500);
+        // Automatic update checks are disabled during startup to keep the desktop stable.\n        // Updates remain available from Settings → System Update.
     }
 
     @Override public void onWindowFocusChanged(boolean hasFocus) {
