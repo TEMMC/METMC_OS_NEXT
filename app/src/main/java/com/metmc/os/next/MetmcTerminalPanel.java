@@ -24,6 +24,8 @@ public final class MetmcTerminalPanel extends FrameLayout {
         setBackgroundColor(Color.rgb(5,8,10));
         terminalView=new TerminalView(context,null);
         terminalView.setTextSize(14);
+        terminalView.setFocusable(true);
+        terminalView.setFocusableInTouchMode(true);
         terminalView.setTerminalViewClient(new ViewClient());
         addView(terminalView,new LayoutParams(-1,-1));
         setFocusable(true);
@@ -55,6 +57,8 @@ public final class MetmcTerminalPanel extends FrameLayout {
             };
             session=new TerminalSession("/system/bin/sh",ROOTFS,args,env,5000,new SessionClient());
             terminalView.attachSession(session);
+            terminalView.setFocusableInTouchMode(true);
+            terminalView.requestFocusFromTouch();
             terminalView.requestFocus();
             postDelayed(()->{
                 try {
@@ -129,7 +133,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
 
     private final class ViewClient implements TerminalViewClient {
         public float onScale(float scale){ return scale; }
-        public void onSingleTapUp(MotionEvent e){ terminalView.requestFocus(); }
+        public void onSingleTapUp(MotionEvent e){ terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); try { InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE); if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT); } catch(Exception ignored) {} }
         public boolean shouldBackButtonBeMappedToEscape(){ return false; }
         public boolean shouldEnforceCharBasedInput(){ return true; }
         public boolean shouldUseCtrlSpaceWorkaround(){ return false; }
