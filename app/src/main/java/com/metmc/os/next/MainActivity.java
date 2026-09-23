@@ -1992,14 +1992,14 @@ public class MainActivity extends Activity {
             }
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 float dy=lastTouchY-y;
-                if(Math.abs(x-downX)>10 || Math.abs(y-downY)>10) gestureMoved=true;
-                if(pendingAppIndex>=0 && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>10){
+                if(Math.abs(x-downX)>6 || Math.abs(y-downY)>6) gestureMoved=true;
+                if(pendingAppIndex>=0 && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>6){
                     scrollingWindow=true; scrollingWindowTitle="Applications";
                 }
-                if(pendingFilePath!=null && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>10){
+                if(pendingFilePath!=null && surface==Surface.DESKTOP && !scrollingWindow && Math.abs(y-downY)>6){
                     scrollingWindow=true; scrollingWindowTitle="Files";
                 }
-                if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>10) scrollingSurface=true;
+                if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>6) scrollingSurface=true;
                 if(surface!=Surface.DESKTOP && scrollingSurface){
                     surfaceScroll+=dy; clampSurfaceScroll(); lastTouchY=y; invalidate(); return true;
                 }
