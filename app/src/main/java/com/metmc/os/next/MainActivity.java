@@ -1589,7 +1589,7 @@ public class MainActivity extends Activity {
                         if("7z".equals(tool)) command="7z x -y "+shellQuote(archive.getAbsolutePath())+" -o"+shellQuote(dest.getAbsolutePath());
                         else if("lz4".equals(tool)) command="lz4 -d "+shellQuote(archive.getAbsolutePath())+" "+shellQuote(new File(dest,archive.getName().replaceAll("\\.lz4$","")).getAbsolutePath());
                         else command="tar -xf "+shellQuote(archive.getAbsolutePath())+" -C "+shellQuote(dest.getAbsolutePath());
-                        Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
+                        java.lang.Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
                         String out=readProcess(pr.getInputStream());int code=pr.waitFor();
                         if(code!=0)throw new IOException(out.isEmpty()?"archive tool failed":out.trim());
                         ok=true;
@@ -1613,7 +1613,7 @@ public class MainActivity extends Activity {
                     else{
                         String tool=lower.endsWith(".7z")||lower.endsWith(".iso")||lower.endsWith(".img")?"7z":"tar";
                         String command="7z".equals(tool)?"7z t "+shellQuote(archive.getAbsolutePath()):"tar -tf "+shellQuote(archive.getAbsolutePath());
-                        Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
+                        java.lang.Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
                         String out=readProcess(pr.getInputStream());int code=pr.waitFor();
                         if(code!=0)throw new IOException(out.trim());
                         ok=true;
@@ -1641,7 +1641,7 @@ public class MainActivity extends Activity {
                         String flag="tar.xz".equals(format)?"-cJf":"-czf";
                         cmd="tar "+flag+" "+shellQuote(out.getAbsolutePath())+" -C "+shellQuote(src.getParentFile().getAbsolutePath())+" "+shellQuote(src.getName());
                     }
-                    Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(cmd)).redirectErrorStream(true).start();
+                    java.lang.Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(cmd)).redirectErrorStream(true).start();
                     String msg=readProcess(pr.getInputStream());int code=pr.waitFor();
                     if(code!=0)throw new IOException(msg.trim());
                     ok=true;
