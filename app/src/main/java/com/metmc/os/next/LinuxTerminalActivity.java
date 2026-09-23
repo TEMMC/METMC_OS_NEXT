@@ -122,9 +122,31 @@ public class LinuxTerminalActivity extends Activity {
         }
     }
 
+    private static final String[] SU_CANDIDATES = {
+        "/data/adb/magisk/su",
+        "/system/bin/su",
+        "/system/xbin/su",
+        "/sbin/su"
+    };
+
+    private String findSuBinary() {
+        for (String candidate : SU_CANDIDATES) {
+            try {
+                File file = new File(candidate);
+                if (file.exists() && file.canExecute()) return candidate;
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
     private void startShell() {
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
+                final String su = findSuBinary();
+                if (su == null) {
+                    append("\\n[METMC] Magisk root shell was not found. Checked: /data/adb/magisk/su, /system/bin/su, /system/xbin/su, /sbin/su\\n");
+                    return;
+                }
                 String script =
                     "R='" + ROOTFS + "'; " +
                     "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
@@ -136,7 +158,10 @@ public class LinuxTerminalActivity extends Activity {
                     "export HOME=/root; export TERM=xterm-256color; " +
                     "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
                     "exec chroot \"$R\" /bin/bash -l";
-                shell = new ProcessBuilder("su","-c",script).redirectErrorStream(true).start();
+                ProcessBuilder builder = new ProcessBuilder(su, "-c", script)
+                        .redirectErrorStream(true);
+                builder.environment().put("PATH", "/system/bin:/system/xbin:/sbin:/data/adb/magisk");
+                shell = builder.start();
                 stdin = new BufferedWriter(new OutputStreamWriter(shell.getOutputStream()));
                 readOutput(shell.getInputStream());
             } catch (Exception e) {
