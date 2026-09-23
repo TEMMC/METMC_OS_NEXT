@@ -32,8 +32,8 @@ public final class MetmcTerminalPanel extends FrameLayout {
     public void start(){
         if(session!=null && session.isRunning()) return;
         try {
-            String script="for SU in /data/adb/magisk/su /system/bin/su /system/xbin/su /sbin/su; do " +
-                    "if [ -x \"$SU\" ]; then exec \"$SU\" -c '" +
+            String script="for SU in /debug_ramdisk/su /sbin/su /debug_ramdisk/magisk /sbin/magisk /data/adb/magisk/su /system/bin/su /system/xbin/su; do " +
+                    "if [ -x \"$SU\" ]; then exec \"$SU\" --mount-master -c '" +
                     "R=/data/local/linux/rootfs; " +
                     "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
                     "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
@@ -46,7 +46,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
                     "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
                     "cd /root 2>/dev/null || true; " +
                     "exec chroot \"$R\" /bin/bash --login' ; fi; " +
-                    "done; echo '[METMC] Magisk root shell not found.'; exit 1";
+                    "done; echo '[METMC] MagiskSU is not visible to this app. Grant METMC OS NEXT root access in Magisk, then reopen Terminal.'; exit 1";
             String[] args={"sh","-c",script};
             String[] env={
                     "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",

@@ -201,6 +201,7 @@ public class MainActivity extends Activity {
         LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
         Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+        launcher.addCategory(Intent.CATEGORY_DEFAULT);
         try {
             for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)) {
                 if (r == null || r.activityInfo == null) continue;
@@ -209,7 +210,18 @@ public class MainActivity extends Activity {
                 if (pkg == null || name == null || pkg.equals(getPackageName())) continue;
                 found.put(pkg + "/" + name, r);
             }
-        } catch (RuntimeException ignored) {}
+        } catch (Throwable ignored) {}
+        try {
+            Intent leanback = new Intent(Intent.ACTION_MAIN);
+            leanback.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+            for (ResolveInfo r : pm.queryIntentActivities(leanback, PackageManager.MATCH_ALL)) {
+                if (r == null || r.activityInfo == null) continue;
+                String pkg = r.activityInfo.packageName;
+                String name = r.activityInfo.name;
+                if (pkg == null || name == null || pkg.equals(getPackageName())) continue;
+                found.put(pkg + "/" + name, r);
+            }
+        } catch (Throwable ignored) {}
         ArrayList<ResolveInfo> list = new ArrayList<>(found.values());
         Collections.sort(list, (a,b) -> {
             String an = String.valueOf(a.loadLabel(pm));
@@ -1112,7 +1124,7 @@ public class MainActivity extends Activity {
         }
         float windowContentHeight(String title,WindowState ws){
             if("Settings".equals(title)) return 62f+13f*52f+40f;
-            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+50f;
+            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+64f;
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
