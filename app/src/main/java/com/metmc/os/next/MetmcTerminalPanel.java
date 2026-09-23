@@ -42,7 +42,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
                     "LC_ALL=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                     "SHELL=/bin/bash"
             };
-            session=new TerminalSession("/system/bin/su",ROOTFS,args,env,5000,new SessionClient());
+            session=new TerminalSession("/data/adb/magisk/su",ROOTFS,args,env,5000,new SessionClient());
             terminalView.attachSession(session);
             terminalView.requestFocus();
             postDelayed(()->{
