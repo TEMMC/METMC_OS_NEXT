@@ -198,22 +198,13 @@ public class MainActivity extends Activity {
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
         try {
             for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)) {
-                if (!getPackageName().equals(r.activityInfo.packageName)) found.put(r.activityInfo.packageName + "/" + r.activityInfo.name, r);
+                if (r == null || r.activityInfo == null) continue;
+                String pkg = r.activityInfo.packageName;
+                String name = r.activityInfo.name;
+                if (pkg == null || name == null || pkg.equals(getPackageName())) continue;
+                found.put(pkg + "/" + name, r);
             }
-        } catch (Exception ignored) {}
-        try {
-            for (ApplicationInfo ai : pm.getInstalledApplications(PackageManager.MATCH_ALL)) {
-                if (getPackageName().equals(ai.packageName)) continue;
-                ResolveInfo r = new ResolveInfo();
-                r.activityInfo = new ActivityInfo();
-                r.activityInfo.applicationInfo = ai;
-                r.activityInfo.packageName = ai.packageName;
-                Intent li = pm.getLaunchIntentForPackage(ai.packageName);
-                if (li != null && li.getComponent() != null) r.activityInfo.name = li.getComponent().getClassName();
-                else r.activityInfo.name = null;
-                found.put(ai.packageName, r);
-            }
-        } catch (Exception ignored) {}
+        } catch (RuntimeException ignored) {}
         ArrayList<ResolveInfo> list = new ArrayList<>(found.values());
         Collections.sort(list, (a,b) -> {
             String an = String.valueOf(a.loadLabel(pm));
@@ -495,7 +486,7 @@ public class MainActivity extends Activity {
 
     void buildTerminalOverlay() {
         if (terminalPanel != null) return;
-        terminalPanel = new MetmcTerminalPanel(getApplicationContext());
+        terminalPanel = new MetmcTerminalPanel(MainActivity.this);
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-1);
         tp.leftMargin=12; tp.rightMargin=12; tp.topMargin=52; tp.bottomMargin=92;
         root.addView(terminalPanel,tp);
