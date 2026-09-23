@@ -1412,7 +1412,7 @@ public class MainActivity extends Activity {
             actions.add("Open"); actions.add("Copy"); actions.add("Cut"); actions.add("Paste here");
             actions.add("Rename"); actions.add("Delete");
             if(isArchiveFile(f)) { actions.add("Extract here"); actions.add("Test archive"); }
-            else actions.add("Compress to ZIP");
+            actions.add("Compress to ZIP"); actions.add("Compress to TAR.GZ"); actions.add("Compress to TAR.XZ"); actions.add("Compress to 7Z");
             actions.add("Share"); actions.add("Properties");
             String[] menu=actions.toArray(new String[0]);
             new AlertDialog.Builder(MainActivity.this).setTitle(f.getName()).setItems(menu,(d,which)->{
@@ -1423,9 +1423,12 @@ public class MainActivity extends Activity {
                 else if(action.equals("Paste here")) pasteFileEntry(fileDirectory);
                 else if(action.equals("Rename")) renameFileEntry(path);
                 else if(action.equals("Delete")) deleteFileEntry(path);
-                else if(action.equals("Extract here")) extractZipAsync(f,fileDirectory);
-                else if(action.equals("Test archive")) testZipAsync(f);
+                else if(action.equals("Extract here")) extractArchiveAsync(f,fileDirectory);
+                else if(action.equals("Test archive")) testArchiveAsync(f);
                 else if(action.equals("Compress to ZIP")) compressZipAsync(f);
+                else if(action.equals("Compress to TAR.GZ")) compressExternalAsync(f,"tar.gz");
+                else if(action.equals("Compress to TAR.XZ")) compressExternalAsync(f,"tar.xz");
+                else if(action.equals("Compress to 7Z")) compressExternalAsync(f,"7z");
                 else if(action.equals("Share")) shareFile(f);
                 else if(action.equals("Properties")) showFileProperties(f);
             }).show();
@@ -1486,7 +1489,7 @@ public class MainActivity extends Activity {
 
         boolean isArchiveFile(File f){
             String n=f.getName().toLowerCase(Locale.US);
-            return n.endsWith(".zip");
+            return n.endsWith(".zip")||n.endsWith(".7z")||n.endsWith(".tar")||n.endsWith(".tgz")||n.endsWith(".tbz")||n.endsWith(".tbz2")||n.endsWith(".txz")||n.endsWith(".tzst")||n.endsWith(".tar.gz")||n.endsWith(".tar.bz2")||n.endsWith(".tar.xz")||n.endsWith(".tar.zst")||n.endsWith(".iso")||n.endsWith(".img")||n.endsWith(".lz4")||n.endsWith(".zst");
         }
         String formatFileSize(long bytes){
             if(bytes<1024) return bytes+" B";
@@ -1566,15 +1569,84 @@ public class MainActivity extends Activity {
                 }
             }
         }
-        void testZipAsync(File zip){
-            addNotification("Testing: "+zip.getName());
+        void extractArchiveAsync(File archive,String destination){
+            String base=archive.getName();
+            String lower=base.toLowerCase(Locale.US);
+            if(lower.endsWith(".tar.gz")||lower.endsWith(".tar.xz")||lower.endsWith(".tar.bz2")||lower.endsWith(".tar.zst")) base=base.substring(0,base.lastIndexOf(".tar"));
+            else {int dot=base.lastIndexOf('.');if(dot>0)base=base.substring(0,dot);}
+            File dest=uniqueFile(new File(destination),base);
+            if(!dest.mkdirs()&&!dest.isDirectory()){addNotification("Could not create extraction folder");return;}
+            addNotification("Extracting: "+archive.getName());
             Executors.newSingleThreadExecutor().execute(()->{
-                boolean ok=false; String error=null;
-                try(ZipInputStream zis=new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))){
-                    byte[] buf=new byte[65536]; ZipEntry e; while((e=zis.getNextEntry())!=null){while(zis.read(buf)>0){} zis.closeEntry();} ok=true;
+                boolean ok=false;String error=null;
+                try{
+                    if(lower.endsWith(".zip")){unzipToDirectory(archive,dest);ok=true;}
+                    else {
+                        String tool=lower.endsWith(".7z")||lower.endsWith(".iso")||lower.endsWith(".img")?"7z":
+                            (lower.endsWith(".lz4")?"lz4":"tar");
+                        String command;
+                        if("7z".equals(tool)) command="7z x -y "+shellQuote(archive.getAbsolutePath())+" -o"+shellQuote(dest.getAbsolutePath());
+                        else if("lz4".equals(tool)) command="lz4 -d "+shellQuote(archive.getAbsolutePath())+" "+shellQuote(new File(dest,archive.getName().replaceAll("\\.lz4$","")).getAbsolutePath());
+                        else command="tar -xf "+shellQuote(archive.getAbsolutePath())+" -C "+shellQuote(dest.getAbsolutePath());
+                        Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
+                        String out=readProcess(pr.getInputStream());int code=pr.waitFor();
+                        if(code!=0)throw new IOException(out.isEmpty()?"archive tool failed":out.trim());
+                        ok=true;
+                    }
                 }catch(Exception e){error=e.getMessage();}
-                final boolean result=ok; final String err=error;
-                new Handler(Looper.getMainLooper()).post(()->addNotification(result?"Archive OK: "+zip.getName():"Archive damaged"+(err==null?"":" : "+err)));
+                final boolean result=ok;final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->{addNotification(result?"Extracted to "+dest.getName():"Extraction failed"+(err==null?"":": "+err));refreshFileEntries();invalidate();});
+            });
+        }
+        String shellQuote(String s){return "'"+s.replace("'","'\\''")+"'";}
+        String readProcess(InputStream in)throws IOException{
+            try(BufferedReader br=new BufferedReader(new InputStreamReader(in))){StringBuilder b=new StringBuilder();String line;while((line=br.readLine())!=null){if(b.length()<4000)b.append(line).append('\n');}return b.toString();}
+        }
+        void testArchiveAsync(File archive){
+            addNotification("Testing: "+archive.getName());
+            Executors.newSingleThreadExecutor().execute(()->{
+                boolean ok=false;String error=null;
+                try{
+                    String lower=archive.getName().toLowerCase(Locale.US);
+                    if(lower.endsWith(".zip")){testZip(archive);ok=true;}
+                    else{
+                        String tool=lower.endsWith(".7z")||lower.endsWith(".iso")||lower.endsWith(".img")?"7z":"tar";
+                        String command="7z".equals(tool)?"7z t "+shellQuote(archive.getAbsolutePath()):"tar -tf "+shellQuote(archive.getAbsolutePath());
+                        Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(command)).redirectErrorStream(true).start();
+                        String out=readProcess(pr.getInputStream());int code=pr.waitFor();
+                        if(code!=0)throw new IOException(out.trim());
+                        ok=true;
+                    }
+                }catch(Exception e){error=e.getMessage();}
+                final boolean result=ok;final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->addNotification(result?"Archive OK: "+archive.getName():"Archive damaged"+(err==null?"":": "+err)));
+            });
+        }
+        void testZip(File zip)throws IOException{
+            try(ZipInputStream zis=new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))){
+                byte[] buf=new byte[65536];ZipEntry e;while((e=zis.getNextEntry())!=null){while(zis.read(buf)>0){}zis.closeEntry();}
+            }
+        }
+        void compressExternalAsync(File src,String format){
+            String ext=format.equals("7z")?".7z":format.equals("tar.xz")?".tar.xz":".tar.gz";
+            File out=uniqueFile(new File(fileDirectory),src.getName()+ext);
+            addNotification("Compressing: "+src.getName()+" -> "+out.getName());
+            Executors.newSingleThreadExecutor().execute(()->{
+                boolean ok=false;String error=null;
+                try{
+                    String cmd;
+                    if("7z".equals(format)) cmd="7z a -y "+shellQuote(out.getAbsolutePath())+" "+shellQuote(src.getAbsolutePath());
+                    else {
+                        String flag="tar.xz".equals(format)?"-cJf":"-czf";
+                        cmd="tar "+flag+" "+shellQuote(out.getAbsolutePath())+" -C "+shellQuote(src.getParentFile().getAbsolutePath())+" "+shellQuote(src.getName());
+                    }
+                    Process pr=new ProcessBuilder("su","-c","chroot "+ROOTFS+" /bin/bash -lc "+shellQuote(cmd)).redirectErrorStream(true).start();
+                    String msg=readProcess(pr.getInputStream());int code=pr.waitFor();
+                    if(code!=0)throw new IOException(msg.trim());
+                    ok=true;
+                }catch(Exception e){error=e.getMessage();try{out.delete();}catch(Exception ignored){}}
+                final boolean result=ok;final String err=error;
+                new Handler(Looper.getMainLooper()).post(()->{addNotification(result?"Created "+out.getName():"Compression failed"+(err==null?"":": "+err));refreshFileEntries();invalidate();});
             });
         }
         void shareFile(File f){
