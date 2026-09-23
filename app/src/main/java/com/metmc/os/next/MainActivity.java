@@ -133,7 +133,11 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, LockScreenActivity.class));
             return;
         }
-        if (desktop != null) { desktop.refreshAndroidApps(); desktop.refreshFileEntries(); desktop.invalidate(); }
+        if (desktop != null) {
+            try { desktop.refreshAndroidApps(); } catch (Throwable ex) { Log.e("METMC","Resume app refresh failed",ex); }
+            try { desktop.refreshFileEntries(); } catch (Throwable ex) { Log.e("METMC","Resume file refresh failed",ex); }
+            desktop.invalidate();
+        }
     }
 
     @Override public void onUserLeaveHint() {
@@ -566,8 +570,15 @@ public class MainActivity extends Activity {
         int fileSortMode=0; // 0=name, 1=modified, 2=size
         String fileFilter="";
 
-        DesktopView(Context c){ super(c); setFocusable(true); clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); refreshAndroidApps(); refreshFileEntries();
-            if(clipboardManager!=null) clipboardManager.addPrimaryClipChangedListener(() -> captureClipboard());
+        DesktopView(Context c){
+            super(c);
+            setFocusable(true);
+            clipboardManager=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            try { refreshAndroidApps(); } catch(Throwable ex) { Log.e("METMC","Initial app refresh failed",ex); }
+            try { refreshFileEntries(); } catch(Throwable ex) { Log.e("METMC","Initial file refresh failed",ex); }
+            try {
+                if(clipboardManager!=null) clipboardManager.addPrimaryClipChangedListener(() -> captureClipboard());
+            } catch(Throwable ex) { Log.e("METMC","Clipboard listener unavailable",ex); }
             notifications.add("METMC OS NEXT started");
         }
         void captureClipboard(){
@@ -583,27 +594,43 @@ public class MainActivity extends Activity {
         }
         void refreshFileEntries(){
             fileEntries.clear();
-            File dir=new File(fileDirectory);
-            if(!dir.isDirectory()) { fileDirectory="/storage/emulated/0"; dir=new File(fileDirectory); }
-            File parent=dir.getParentFile();
-            fileParentDirectory=parent!=null?parent.getAbsolutePath():null;
-            if(parent!=null) fileEntries.put("..",parent.getAbsolutePath());
-            File[] fs=dir.listFiles();
-            if(fs!=null){
-                final String filter=fileFilter==null?"":fileFilter.trim().toLowerCase(Locale.US);
-                ArrayList<File> visible=new ArrayList<>();
-                for(File f:fs){
-                    if(!showHiddenFiles && f.getName().startsWith(".")) continue;
-                    if(!filter.isEmpty() && !f.getName().toLowerCase(Locale.US).contains(filter)) continue;
-                    visible.add(f);
+            try {
+                File dir=new File(fileDirectory);
+                if(!dir.isDirectory()) { fileDirectory="/storage/emulated/0"; dir=new File(fileDirectory); }
+                File parent=dir.getParentFile();
+                fileParentDirectory=parent!=null?parent.getAbsolutePath():null;
+                if(parent!=null) fileEntries.put("..",parent.getAbsolutePath());
+                File[] fs;
+                try { fs=dir.listFiles(); }
+                catch(Throwable ex) {
+                    Log.e("METMC","File listing failed: "+dir.getAbsolutePath(),ex);
+                    return;
                 }
-                Collections.sort(visible,(a,b)->{
-                    if(a.isDirectory()!=b.isDirectory()) return a.isDirectory()?-1:1;
-                    if(fileSortMode==1) return Long.compare(b.lastModified(),a.lastModified());
-                    if(fileSortMode==2) return Long.compare(b.length(),a.length());
-                    return a.getName().compareToIgnoreCase(b.getName());
-                });
-                for(File f:visible) fileEntries.put(f.getAbsolutePath(),f.getAbsolutePath());
+                if(fs!=null){
+                    final String filter=fileFilter==null?"":fileFilter.trim().toLowerCase(Locale.US);
+                    ArrayList<File> visible=new ArrayList<>();
+                    for(File f:fs){
+                        if(f==null) continue;
+                        String name=f.getName();
+                        if(!showHiddenFiles && name.startsWith(".")) continue;
+                        if(!filter.isEmpty() && !name.toLowerCase(Locale.US).contains(filter)) continue;
+                        visible.add(f);
+                    }
+                    Collections.sort(visible,(a,b)->{
+                        try {
+                            if(a.isDirectory()!=b.isDirectory()) return a.isDirectory()?-1:1;
+                            if(fileSortMode==1) return Long.compare(b.lastModified(),a.lastModified());
+                            if(fileSortMode==2) return Long.compare(b.length(),a.length());
+                            return a.getName().compareToIgnoreCase(b.getName());
+                        } catch(Throwable ex) { return 0; }
+                    });
+                    for(File f:visible) {
+                        try { fileEntries.put(f.getAbsolutePath(),f.getAbsolutePath()); }
+                        catch(Throwable ignored) {}
+                    }
+                }
+            } catch(Throwable ex) {
+                Log.e("METMC","File refresh failed",ex);
             }
         }
 
@@ -688,7 +715,7 @@ public class MainActivity extends Activity {
                 else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
                 else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
                 if(surface==Surface.DESKTOP) { drawAllWindows(c,w,h); drawDock(c,w,h); }
-            } catch(Exception ex) {
+            } catch(Throwable ex) {
                 Log.e("METMC","Desktop draw failed",ex);
                 surface=Surface.DESKTOP;
                 try {
