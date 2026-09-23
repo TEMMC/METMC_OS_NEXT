@@ -134,7 +134,7 @@ public class MainActivity extends Activity {
             return;
         }
         if (desktop != null) {
-            try { desktop.refreshAndroidApps(); } catch (Throwable ex) { Log.e("METMC","Resume app refresh failed",ex); }
+            try { desktop.invalidate(); } catch (Throwable ex) { Log.e("METMC","Resume desktop refresh failed",ex); }
             try { desktop.refreshFileEntries(); } catch (Throwable ex) { Log.e("METMC","Resume file refresh failed",ex); }
             desktop.invalidate();
         }
@@ -199,22 +199,9 @@ public class MainActivity extends Activity {
     ArrayList<ResolveInfo> getAndroidApps() {
         PackageManager pm = getPackageManager();
         LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
-        Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
-        launcher.addCategory(Intent.CATEGORY_DEFAULT);
         try {
-            for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)) {
-                if (r == null || r.activityInfo == null) continue;
-                String pkg = r.activityInfo.packageName;
-                String name = r.activityInfo.name;
-                if (pkg == null || name == null || pkg.equals(getPackageName())) continue;
-                found.put(pkg + "/" + name, r);
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Intent leanback = new Intent(Intent.ACTION_MAIN);
-            leanback.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
-            for (ResolveInfo r : pm.queryIntentActivities(leanback, PackageManager.MATCH_ALL)) {
+            for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_DEFAULT_ONLY)) {
                 if (r == null || r.activityInfo == null) continue;
                 String pkg = r.activityInfo.packageName;
                 String name = r.activityInfo.name;
@@ -585,6 +572,7 @@ public class MainActivity extends Activity {
         boolean showHiddenFiles=false;
         int fileSortMode=0; // 0=name, 1=modified, 2=size
         String fileFilter="";
+        long lastAndroidAppsRefresh=0;
 
         DesktopView(Context c){
             super(c);
@@ -651,6 +639,9 @@ public class MainActivity extends Activity {
         }
 
         void refreshAndroidApps(){
+            long now=SystemClock.uptimeMillis();
+            if(now-lastAndroidAppsRefresh<1200 && !androidApps.isEmpty()) return;
+            lastAndroidAppsRefresh=now;
             try {
                 androidApps.clear();
                 androidApps.addAll(getAndroidApps());
@@ -1126,7 +1117,10 @@ public class MainActivity extends Activity {
         }
         float windowContentHeight(String title,WindowState ws){
             if("Settings".equals(title)) return 62f+13f*52f+40f;
-            if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+64f;
+            if("Applications".equals(title)) {
+                int rows=(int)Math.ceil((6+androidApps.size())/3.0);
+                return 62f+Math.max(1,rows)*116f+30f;
+            }
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
             if("Wallpaper Manager".equals(title)) return 68f+3f*96f+40f;
@@ -2023,7 +2017,7 @@ public class MainActivity extends Activity {
                 if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){
                     WindowState sws=windows.get(scrollingWindowTitle);
                     if(sws!=null){
-                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }
+                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); invalidate(); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }
                         lastTouchY=y; invalidate(); return true;
                     }
                 }
@@ -2293,6 +2287,7 @@ public class MainActivity extends Activity {
             if(list==null){ list=new ArrayList<>(); workspaceWindows.put(currentWorkspace,list); }
             if(!list.contains(name)) list.add(name);
             WindowState ws=windowFor(name);
+            if("Applications".equals(name)) refreshAndroidApps();
             if(!openWindows.contains(name)){ openWindows.add(name); if("Applications".equals(name)) applicationsWindowScroll=0; }
             recentItems.remove(name); recentItems.add(0,name);
             addNotification(name+" opened");
