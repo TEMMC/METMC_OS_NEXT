@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     java.lang.Process terminalShell;
     LinearLayout terminalToolbar;
     LinearLayout terminalKeyBar;
+    MetmcTerminalPanel terminalPanel;
     boolean interactiveTerminalMode=false;
     boolean suppressTerminalBridge=false;
     static final int PICK_WALLPAPER = 9001;
@@ -351,41 +352,20 @@ public class MainActivity extends Activity {
         }
     }
 
-    void launchTerminal() { desktop.showWindow("Terminal"); startTerminalShell(); }
+    void launchTerminal() {
+        desktop.showWindow("Terminal");
+        buildTerminalOverlay();
+        desktop.syncTerminalOverlay();
+        if (terminalPanel != null) terminalPanel.start();
+    }
 
     void launchLinuxTool(String command) {
         desktop.showWindow("Terminal");
         buildTerminalOverlay();
         desktop.syncTerminalOverlay();
-        final boolean interactive = command.equals("vim") || command.equals("nano") || command.equals("htop") || command.equals("python3");
-        startTerminalShell();
-        final Handler handler = new Handler(Looper.getMainLooper());
-        final long deadline = SystemClock.uptimeMillis() + 8000;
-        Runnable send = new Runnable() {
-            @Override public void run() {
-                if (terminalStdin != null && terminalShell != null && terminalShell.isAlive()) {
-                    try {
-                        terminalStdin.write(command);
-                        terminalStdin.newLine();
-                        terminalStdin.flush();
-                        interactiveTerminalMode = interactive;
-                        if (terminalInput != null) {
-                            suppressTerminalBridge=true;
-                            terminalInput.setText("");
-                            suppressTerminalBridge=false;
-                            terminalInput.requestFocus();
-                        }
-                    } catch(Exception e) {
-                        appendTerminal("\n[METMC] Could not start Linux program: "+e+"\n");
-                    }
-                } else if (SystemClock.uptimeMillis() < deadline) {
-                    handler.postDelayed(this, 150);
-                } else {
-                    appendTerminal("\n[METMC] Linux terminal did not become ready.\n");
-                }
-            }
-        };
-        handler.post(send);
+        if (terminalPanel == null) return;
+        terminalPanel.start();
+        new Handler(Looper.getMainLooper()).postDelayed(() -> terminalPanel.send(command + "\r"), 700);
     }
 
     void startTerminalShell() {
@@ -499,191 +479,47 @@ public class MainActivity extends Activity {
     }
 
     void closeTerminalShell() {
-        try { if (terminalStdin != null) { terminalStdin.write("exit"); terminalStdin.newLine(); terminalStdin.flush(); } } catch(Exception ignored) {}
-        try { if (terminalShell != null) terminalShell.destroy(); } catch(Exception ignored) {}
-        terminalShell = null; terminalStdin = null;
+        if(terminalPanel!=null)terminalPanel.stop();
+        try{if(terminalStdin!=null){terminalStdin.write("exit");terminalStdin.newLine();terminalStdin.flush();}}catch(Exception ignored){}
+        try{if(terminalShell!=null)terminalShell.destroy();}catch(Exception ignored){}
+        terminalShell=null;terminalStdin=null;
     }
 
     void buildTerminalOverlay() {
-        if (terminalInput != null) return;
-
-        terminalOutput = new TextView(this);
-        terminalOutput.setTextColor(0xffd8f7df);
-        terminalOutput.setTextSize(14);
-        terminalOutput.setTypeface(Typeface.MONOSPACE);
-        terminalOutput.setLineSpacing(0f,1.0f);
-        terminalOutput.setIncludeFontPadding(false);
-        terminalOutput.setPadding(14,10,14,10);
-        terminalOutput.setGravity(Gravity.TOP|Gravity.START);
-        terminalOutput.setTextIsSelectable(true);
-        terminalOutput.setLongClickable(true);
-        terminalOutput.setTextIsSelectable(true);
-        terminalOutput.setOnLongClickListener(v -> { v.performLongClick(); return false; });
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(0xff080c0d);
-        scroll.setFillViewport(false);
-        scroll.setVerticalScrollBarEnabled(true);
-        scroll.setScrollbarFadingEnabled(false);
-        scroll.addView(terminalOutput, new ScrollView.LayoutParams(-1,-2));
-        FrameLayout.LayoutParams sp = new FrameLayout.LayoutParams(-1,-1);
-        sp.leftMargin=32; sp.rightMargin=32; sp.topMargin=108; sp.bottomMargin=146;
-        root.addView(scroll, sp);
-
-        terminalPrompt = new TextView(this);
-        terminalPrompt.setText("root@debian:~#");
-        terminalPrompt.setTextColor(0xff39ff88);
-        terminalPrompt.setTextSize(14);
-        terminalPrompt.setTypeface(Typeface.MONOSPACE);
-        terminalPrompt.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        terminalPrompt.setPadding(12,0,0,0);
-        terminalPrompt.setBackgroundColor(0xff0d1418);
-        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(132,48);
-        pp.leftMargin=32; pp.gravity=Gravity.BOTTOM; pp.bottomMargin=98;
-        root.addView(terminalPrompt,pp);
-
-        terminalInput = new EditText(this);
-        terminalInput.setSingleLine(true);
-        terminalInput.setTextColor(Color.WHITE);
-        terminalInput.setHintTextColor(0xff536575);
-        terminalInput.setHint("type a command");
-        terminalInput.setTextIsSelectable(true);
-        terminalInput.setLongClickable(true);
-        terminalInput.setSelectAllOnFocus(false);
-        terminalInput.setTextSize(14);
-        terminalInput.setTypeface(Typeface.MONOSPACE);
-        terminalInput.setIncludeFontPadding(false);
-        terminalInput.setHorizontallyScrolling(true);
-        terminalInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
-        terminalInput.setGravity(Gravity.CENTER_VERTICAL|Gravity.LEFT);
-        terminalInput.setSingleLine(true);
-        terminalInput.setHint("");
-        terminalInput.setPadding(6,0,8,0);
-        terminalInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        terminalInput.setBackgroundColor(Color.TRANSPARENT);
-        terminalInput.setOnEditorActionListener((v,id,event)->{
-            if(interactiveTerminalMode){
-                try{ if(terminalStdin!=null){ terminalStdin.write("\n"); terminalStdin.flush(); } }catch(Exception ignored){}
-                suppressTerminalBridge=true; terminalInput.setText(""); suppressTerminalBridge=false; return true;
-            }
-            sendTerminalCommand(); return true;
-        });
-        terminalInput.addTextChangedListener(new android.text.TextWatcher(){
-            public void beforeTextChanged(CharSequence s,int start,int count,int after){
-                if(interactiveTerminalMode && !suppressTerminalBridge && count>after){
-                    try{ if(terminalStdin!=null){ for(int i=0;i<count-after;i++) terminalStdin.write(127); terminalStdin.flush(); } }catch(Exception ignored){}
-                }
-            }
-            public void onTextChanged(CharSequence s,int start,int before,int count){
-                if(interactiveTerminalMode && !suppressTerminalBridge && count>0){
-                    try{ if(terminalStdin!=null){ terminalStdin.write(s.subSequence(start,start+count).toString()); terminalStdin.flush(); } }catch(Exception ignored){}
-                    suppressTerminalBridge=true; terminalInput.setText(""); suppressTerminalBridge=false;
-                }
-            }
-            public void afterTextChanged(android.text.Editable e){}
-        });
-        terminalInput.setOnFocusChangeListener((v,has)->{ if(has) terminalInput.post(()->terminalInput.setSelection(terminalInput.length())); });
-        terminalInput.setOnKeyListener((v,key,event)->{
-            if(event.getAction()!=KeyEvent.ACTION_DOWN) return false;
-            if(key==KeyEvent.KEYCODE_DPAD_UP){ terminalHistoryMove(-1); return true; }
-            if(key==KeyEvent.KEYCODE_DPAD_DOWN){ terminalHistoryMove(1); return true; }
-            if(key==KeyEvent.KEYCODE_C && event.isCtrlPressed()){ terminalInterrupt(); return true; }
-            return false;
-        });
-        FrameLayout.LayoutParams ip = new FrameLayout.LayoutParams(-1,48);
-        ip.leftMargin=164; ip.rightMargin=12; ip.gravity=Gravity.BOTTOM; ip.bottomMargin=98;
-        root.addView(terminalInput,ip);
-
-        // Termux-style terminal controls: always available above the Android IME.
+        if (terminalPanel != null) return;
+        terminalPanel = new MetmcTerminalPanel(this);
+        FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-1);
+        tp.leftMargin=12; tp.rightMargin=12; tp.topMargin=52; tp.bottomMargin=92;
+        root.addView(terminalPanel,tp);
         terminalKeyBar=new LinearLayout(this);
-        terminalKeyBar.setOrientation(LinearLayout.VERTICAL);
+        terminalKeyBar.setOrientation(LinearLayout.HORIZONTAL);
         terminalKeyBar.setPadding(4,3,4,3);
         terminalKeyBar.setBackgroundColor(0xff10161d);
-        String[][] rows={{"ESC","TAB","↑","HOME","END","PGUP"},{"CTRL","ALT","←","↓","→","PGDN"}};
-        for(String[] row:rows){
-            LinearLayout line=new LinearLayout(this);
-            line.setOrientation(LinearLayout.HORIZONTAL);
-            for(String label:row){
-                TextView key=new TextView(this);
-                key.setText(label); key.setTextColor(0xffe8edf3); key.setTextSize(11);
-                key.setTypeface(Typeface.DEFAULT,Typeface.BOLD); key.setGravity(Gravity.CENTER);
-                key.setBackgroundColor(0xff1b242e); key.setPadding(3,0,3,0);
-                LinearLayout.LayoutParams kp=new LinearLayout.LayoutParams(0,34,1f);
-                kp.setMargins(3,2,3,2); line.addView(key,kp);
-                key.setOnClickListener(v->sendTerminalSpecialKey(label));
-            }
-            terminalKeyBar.addView(line,new LinearLayout.LayoutParams(-1,40));
+        String[] keys={"ESC","TAB","↑","↓","←","→","HOME","END","PGUP","PGDN"};
+        for(String label:keys){
+            TextView key=new TextView(this);
+            key.setText(label); key.setTextColor(0xffe8edf3); key.setTextSize(10);
+            key.setTypeface(Typeface.DEFAULT,Typeface.BOLD); key.setGravity(Gravity.CENTER);
+            key.setBackgroundColor(0xff1b242e);
+            LinearLayout.LayoutParams kp=new LinearLayout.LayoutParams(0,42,1f);
+            kp.setMargins(2,2,2,2); terminalKeyBar.addView(key,kp);
+            key.setOnClickListener(v -> {
+                if(terminalPanel==null)return;
+                if("↑".equals(label))terminalPanel.sendKey("UP");
+                else if("↓".equals(label))terminalPanel.sendKey("DOWN");
+                else if("←".equals(label))terminalPanel.sendKey("LEFT");
+                else if("→".equals(label))terminalPanel.sendKey("RIGHT");
+                else terminalPanel.sendKey(label);
+            });
         }
-        FrameLayout.LayoutParams kb=new FrameLayout.LayoutParams(-1,88);
-        kb.leftMargin=32; kb.rightMargin=32; kb.gravity=Gravity.BOTTOM;
+        FrameLayout.LayoutParams kb=new FrameLayout.LayoutParams(-1,50);
+        kb.leftMargin=12;kb.rightMargin=12;kb.gravity=Gravity.BOTTOM;kb.bottomMargin=92;
         root.addView(terminalKeyBar,kb); terminalKeyBar.setVisibility(View.GONE);
-        terminalInput.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
-            public boolean onCreateActionMode(ActionMode mode,Menu menu){ return true; }
-            public boolean onPrepareActionMode(ActionMode mode,Menu menu){ return true; }
-            public boolean onActionItemClicked(ActionMode mode,MenuItem item){ return false; }
-            public void onDestroyActionMode(ActionMode mode){}
-        });
-        terminalOutput.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
-            public boolean onCreateActionMode(ActionMode mode,Menu menu){ return true; }
-            public boolean onPrepareActionMode(ActionMode mode,Menu menu){ return true; }
-            public boolean onActionItemClicked(ActionMode mode,MenuItem item){ return false; }
-            public void onDestroyActionMode(ActionMode mode){}
-        });
-        terminalInput.requestFocus();
-        terminalInput.postDelayed(()->{
-            android.view.inputmethod.InputMethodManager imm=(android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-            if(imm!=null) imm.showSoftInput(terminalInput,InputMethodManager.SHOW_IMPLICIT);
-        },180);
     }
 
-    void sendTerminalSpecialKey(String label){
-        if(terminalInput==null)return;
-        terminalInput.requestFocus();
-        String seq=null;
-        if("ESC".equals(label))seq="\\u001b";
-        else if("TAB".equals(label))seq="\\t";
-        else if("↑".equals(label))seq="\\u001b[A";
-        else if("↓".equals(label))seq="\\u001b[B";
-        else if("→".equals(label))seq="\\u001b[C";
-        else if("←".equals(label))seq="\\u001b[D";
-        else if("HOME".equals(label))seq="\\u001b[H";
-        else if("END".equals(label))seq="\\u001b[F";
-        else if("PGUP".equals(label))seq="\\u001b[5~";
-        else if("PGDN".equals(label))seq="\\u001b[6~";
-        else if("CTRL".equals(label)){if(interactiveTerminalMode)seq="\\u0001";else{terminalHistoryMove(-1);return;}}
-        else if("ALT".equals(label))seq="\\u001b";
-        if(seq==null)return;
-        if(interactiveTerminalMode){
-            try{if(terminalStdin!=null){terminalStdin.write(seq);terminalStdin.flush();}}catch(Exception e){appendTerminal("\\n[METMC] key input failed: "+e+"\\n");}
-            return;
-        }
-        if("↑".equals(label)){terminalHistoryMove(-1);return;}
-        if("↓".equals(label)){terminalHistoryMove(1);return;}
-        if("TAB".equals(label)){terminalInput.append("\\t");return;}
-    }
     void removeTerminalOverlay() {
-        if (terminalInput != null) {
-            ViewParent p=terminalInput.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalInput);
-            terminalInput=null;
-        }
-        if (terminalPrompt != null) {
-            ViewParent p=terminalPrompt.getParent(); if(p instanceof ViewGroup) ((ViewGroup)p).removeView(terminalPrompt);
-            terminalPrompt=null;
-        }
-        if (terminalOutput != null) {
-            if(terminalKeyBar!=null){
-                ViewParent kp=terminalKeyBar.getParent(); if(kp instanceof ViewGroup)((ViewGroup)kp).removeView(terminalKeyBar);
-                terminalKeyBar=null;
-            }
-            ViewParent p=terminalOutput.getParent();
-            if(p instanceof ViewGroup) {
-                ViewGroup parent=(ViewGroup)p;
-                parent.removeView(terminalOutput);
-                ViewParent gp=parent.getParent();
-                if(gp instanceof ViewGroup) ((ViewGroup)gp).removeView(parent);
-            }
-            terminalOutput=null;
-        }
+        if(terminalPanel!=null){terminalPanel.stop();ViewParent p=terminalPanel.getParent();if(p instanceof ViewGroup)((ViewGroup)p).removeView(terminalPanel);terminalPanel=null;}
+        if(terminalKeyBar!=null){ViewParent p=terminalKeyBar.getParent();if(p instanceof ViewGroup)((ViewGroup)p).removeView(terminalKeyBar);terminalKeyBar=null;}
         closeTerminalShell();
     }
 
@@ -2268,53 +2104,27 @@ public class MainActivity extends Activity {
         }
 
         void hideTerminalOverlay(){
-            if(terminalPrompt!=null)terminalPrompt.setVisibility(View.GONE);
-            if(terminalInput!=null)terminalInput.setVisibility(View.GONE);
-            if(terminalOutput!=null&&terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.GONE);
+            if(terminalPanel!=null)terminalPanel.setVisibility(View.GONE);
             if(terminalKeyBar!=null)terminalKeyBar.setVisibility(View.GONE);
         }
 
         void syncTerminalOverlay(){
             WindowState ws=windows.get("Terminal");
             if(ws==null||ws.minimized||!"Terminal".equals(activeWindow)||surface!=Surface.DESKTOP){hideTerminalOverlay();return;}
-            if(terminalInput==null||terminalOutput==null||terminalPrompt==null)return;
-            terminalPrompt.setVisibility(View.VISIBLE);
-            terminalInput.setVisibility(View.VISIBLE);
-            if(terminalOutput.getParent()!=null)((View)terminalOutput.getParent()).setVisibility(View.VISIBLE);
+            buildTerminalOverlay(); terminalPanel.setVisibility(View.VISIBLE);
             if(terminalKeyBar!=null)terminalKeyBar.setVisibility(View.VISIBLE);
-
-            ViewParent terminalParent=terminalOutput.getParent();
-            FrameLayout.LayoutParams sp=(FrameLayout.LayoutParams)((View)terminalParent).getLayoutParams();
-            sp.width=Math.max(1,(int)(ws.r-ws.l-24));
-            sp.height=Math.max(1,(int)(ws.b-ws.t-166));
-            sp.leftMargin=(int)ws.l+12;
-            sp.topMargin=(int)ws.t+108;
-            sp.rightMargin=0; sp.bottomMargin=0;
-            ((View)terminalParent).setLayoutParams(sp);
-
-            FrameLayout.LayoutParams pp=(FrameLayout.LayoutParams)terminalPrompt.getLayoutParams();
-            pp.width=132; pp.height=50;
-            pp.leftMargin=(int)ws.l+12; pp.topMargin=(int)ws.t+54;
-            pp.rightMargin=0; pp.bottomMargin=0; pp.gravity=Gravity.TOP|Gravity.LEFT;
-            terminalPrompt.setLayoutParams(pp);
-
-            FrameLayout.LayoutParams ip=(FrameLayout.LayoutParams)terminalInput.getLayoutParams();
-            ip.width=Math.max(1,(int)(ws.r-ws.l-150)); ip.height=50;
-            ip.leftMargin=(int)ws.l+140; ip.topMargin=(int)ws.t+54;
-            ip.rightMargin=0; ip.bottomMargin=0; ip.gravity=Gravity.TOP|Gravity.LEFT;
-            terminalInput.setLayoutParams(ip);
+            FrameLayout.LayoutParams tp=(FrameLayout.LayoutParams)terminalPanel.getLayoutParams();
+            tp.width=Math.max(1,(int)(ws.r-ws.l-24));tp.height=Math.max(1,(int)(ws.b-ws.t-150));
+            tp.leftMargin=(int)ws.l+12;tp.topMargin=(int)ws.t+52;tp.rightMargin=0;tp.bottomMargin=0;
+            tp.gravity=Gravity.TOP|Gravity.LEFT;terminalPanel.setLayoutParams(tp);
             if(terminalKeyBar!=null){
                 FrameLayout.LayoutParams kb=(FrameLayout.LayoutParams)terminalKeyBar.getLayoutParams();
-                kb.width=Math.max(1,(int)(ws.r-ws.l-24));
-                kb.height=88;
-                kb.leftMargin=(int)ws.l+12;
-                kb.rightMargin=0;
-                kb.topMargin=Math.max((int)ws.t+106,root.getHeight()-88);
-                kb.bottomMargin=0;
-                kb.gravity=Gravity.TOP|Gravity.LEFT;
-                terminalKeyBar.setLayoutParams(kb);
+                kb.width=Math.max(1,(int)(ws.r-ws.l-24));kb.height=50;
+                kb.leftMargin=(int)ws.l+12;kb.topMargin=(int)ws.b-62;kb.rightMargin=0;kb.bottomMargin=0;
+                kb.gravity=Gravity.TOP|Gravity.LEFT;terminalKeyBar.setLayoutParams(kb);
             }
         }
+
         void showWindow(String name){
             if("Files".equals(name) && android.os.Build.VERSION.SDK_INT>=30 && !android.os.Environment.isExternalStorageManager()){
                 try{
