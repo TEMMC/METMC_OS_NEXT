@@ -3,6 +3,11 @@ plugins {
 }
 
 android {
+    sourceSets {
+        main {
+            java.srcDirs = ['src/main/java', '../com']
+        }
+    }
     namespace 'com.metmc.os.next'
     compileSdk 36
 
@@ -42,4 +47,6 @@ android {
 
 dependencies {
     implementation 'androidx.core:core:1.17.0'
+    implementation 'com.termux.termux-app:terminal-view:0.118.0'
+    implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
 }
