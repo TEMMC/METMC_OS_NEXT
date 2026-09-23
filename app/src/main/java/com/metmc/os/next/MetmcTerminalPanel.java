@@ -36,13 +36,24 @@ public final class MetmcTerminalPanel extends FrameLayout {
                     "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; "+
                     "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; "+
                     "exec chroot "+ROOTFS+" /bin/bash --login";
-            String[] args={"-c",command};
+            String[] args={"-c", "R='" + ROOTFS + "'; " +
+                    "for SU in /data/adb/magisk/su /system/bin/su /system/xbin/su /sbin/su; do " +
+                    "if [ -x \"$SU\" ]; then exec \"$SU\" -c '" +
+                    "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
+                    "mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; " +
+                    "mount -t proc proc \"$R/proc\" 2>/dev/null || true; " +
+                    "mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; " +
+                    "mkdir -p \"$R/tmp\" \"$R/run\"; " +
+                    "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
+                    "export HOME=/root; export TERM=xterm-256color; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
+                    "exec chroot \"$R\" /bin/bash --login' ; fi; " +
+                    "done; echo '[METMC] Magisk root shell not found.'; exit 1"};
             String[] env={
                     "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
                     "LC_ALL=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                     "SHELL=/bin/bash"
             };
-            session=new TerminalSession("/data/adb/magisk/su",ROOTFS,args,env,5000,new SessionClient());
+            session=new TerminalSession("/system/bin/sh",ROOTFS,args,env,5000,new SessionClient());
             terminalView.attachSession(session);
             terminalView.requestFocus();
             postDelayed(()->{
