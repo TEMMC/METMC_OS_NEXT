@@ -670,18 +670,26 @@ public class MainActivity extends Activity {
         void bold(Canvas c,String s,float x,float y,float size,int color){fill(c,color);p.setTypeface(Typeface.create("sans",Typeface.BOLD));p.setTextSize(size);c.drawText(s,x,y,p);}
 
         @Override protected void onDraw(Canvas c){
-            int w=getWidth(),h=getHeight();
-            drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h);
-            if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);
-            if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
-            else if(surface==Surface.APPS) drawApps(c,w,h);
-            else if(surface==Surface.QUICK) drawQuick(c,w,h);
-            else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
-            else if(surface==Surface.NOTIFICATIONS) drawNotifications(c,w,h);
-            else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
-            else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
-            if(surface==Surface.DESKTOP) { drawAllWindows(c,w,h); drawDock(c,w,h); }
-        }catch(Exception ex){ Log.e("METMC","Desktop draw failed",ex); surface=Surface.DESKTOP; try{c.drawColor(Color.rgb(5,8,10)); text(c,"METMC OS recovered from a window error",24,90,16,Color.WHITE);}catch(Exception ignored){} }
+            try {
+                int w=getWidth(),h=getHeight();
+                drawWallpaper(c,w,h); drawTopBar(c,w); drawWorkspaceSwitcher(c,w,h);
+                if(surface==Surface.DESKTOP) drawDesktopIcons(c,w,h);
+                if(surface==Surface.OVERVIEW) drawOverview(c,w,h);
+                else if(surface==Surface.APPS) drawApps(c,w,h);
+                else if(surface==Surface.QUICK) drawQuick(c,w,h);
+                else if(surface==Surface.SETTINGS) drawSettings(c,w,h);
+                else if(surface==Surface.NOTIFICATIONS) drawNotifications(c,w,h);
+                else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
+                else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
+                if(surface==Surface.DESKTOP) { drawAllWindows(c,w,h); drawDock(c,w,h); }
+            } catch(Exception ex) {
+                Log.e("METMC","Desktop draw failed",ex);
+                surface=Surface.DESKTOP;
+                try {
+                    c.drawColor(Color.rgb(5,8,10));
+                    text(c,"METMC OS recovered from a window error",24,90,16,Color.WHITE);
+                } catch(Exception ignored) {}
+            }
         }
 
         Bitmap customWallpaper;
