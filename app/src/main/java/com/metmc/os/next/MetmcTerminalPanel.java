@@ -4,6 +4,8 @@ import android.content.*;
 import android.graphics.Color;
 import android.os.*;
 import android.view.*;
+import android.widget.FrameLayout;
+import java.nio.charset.StandardCharsets;
 import android.view.inputmethod.InputMethodManager;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
@@ -19,7 +21,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
     public MetmcTerminalPanel(Context context){
         super(context);
         setBackgroundColor(Color.rgb(5,8,10));
-        terminalView=new TerminalView(context);
+        terminalView=new TerminalView(context,null);
         terminalView.setTextSize(14);
         terminalView.setTerminalViewClient(new ViewClient());
         addView(terminalView,new LayoutParams(-1,-1));
@@ -42,7 +44,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
         terminalView.attachSession(session);
         terminalView.requestFocus();
         postDelayed(()->{
-            InputMethodManager imm=(InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
             if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
         },300);
     }
@@ -53,11 +55,17 @@ public final class MetmcTerminalPanel extends FrameLayout {
     }
 
     public void send(String text){
-        if(session!=null && session.isRunning()) session.write(text, text.length());
+        if(session!=null && session.isRunning()) writeBytes(text);
     }
 
     public void sendCodePoint(int codePoint){
         if(session!=null && session.isRunning()) session.writeCodePoint(false,codePoint);
+    }
+
+    private void writeBytes(String text){
+        if(session==null||!session.isRunning()||text==null)return;
+        byte[] b=text.getBytes(StandardCharsets.UTF_8);
+        session.write(b,0,b.length);
     }
 
     public void sendKey(String name){
@@ -74,7 +82,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
         else if("END".equals(name)) s="\u001b[F";
         else if("PGUP".equals(name)) s="\u001b[5~";
         else if("PGDN".equals(name)) s="\u001b[6~";
-        if(s!=null) session.write(s,s.length());
+        if(s!=null) writeBytes(s);
     }
 
     public void copySelection(){
@@ -84,13 +92,13 @@ public final class MetmcTerminalPanel extends FrameLayout {
     public void pasteClipboard(){
         android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE);
         if(cm!=null && cm.hasPrimaryClip() && session!=null && session.isRunning()){
-            CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(getContext());
+            CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(MetmcTerminalPanel.this.getContext());
             if(text!=null) session.getEmulator().paste(text.toString());
         }
     }
 
     public void clear(){
-        if(session!=null && session.isRunning()) session.write("\u000c",1);
+        if(session!=null && session.isRunning()) writeBytes("\u000c");
     }
 
     private final class ViewClient implements TerminalViewClient {
@@ -126,7 +134,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
     }
 
     private final class SessionClient implements TerminalSessionClient {
-        public void onTextChanged(TerminalSession s){ postInvalidate(); }
+        public void onTextChanged(TerminalSession s){ MetmcTerminalPanel.this.postInvalidate(); }
         public void onTitleChanged(TerminalSession s){}
         public void onSessionFinished(TerminalSession s){}
         public void onCopyTextToClipboard(TerminalSession s,String text){
