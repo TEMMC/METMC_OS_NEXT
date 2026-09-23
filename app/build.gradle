@@ -15,7 +15,7 @@ android {
         applicationId 'com.metmc.os.next'
         minSdk 31
         targetSdk 36
-        versionCode 4
+        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '4').toInteger()
         versionName '1.2.0'
     }
 
