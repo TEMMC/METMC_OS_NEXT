@@ -1162,7 +1162,7 @@ public class MainActivity extends Activity {
             for(int i=0;i<total;i++){
                 int col=i%3,row=i/3;
                 float x=l+16+col*(cw+8), y=top+row*116;
-                if(y+104<b-12 && y+104>=t+54){
+                {
                     round(c,x,y,x+cw,y+104,12,0xff151d27);
                     if(i<n.length){
                         drawAppIcon(c,x+10,y+25,n[i]);
@@ -1389,9 +1389,7 @@ public class MainActivity extends Activity {
             float gap=10f, tileW=(available-gap*(columns-1))/columns;
             float tileH=62f, step=72f;
             ArrayList<String> entries=new ArrayList<>(fileEntries.values());
-            int visibleRows=Math.max(1,(int)((contentBottom-contentTop)/step)+1);
-            int visible=Math.min(entries.size(),visibleRows*columns);
-            for(int i=0;i<visible;i++){
+            for(int i=0;i<entries.size();i++){
                 int col=i%columns,row=i/columns;
                 float x=l+24+col*(tileW+gap), yy=contentTop+row*step;
                 round(c,x,yy,x+tileW,yy+tileH,12,0xff151f29);
