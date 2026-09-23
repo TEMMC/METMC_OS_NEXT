@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.os.*;
 import android.view.*;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import java.nio.charset.StandardCharsets;
 import android.view.inputmethod.InputMethodManager;
 import com.termux.terminal.TerminalSession;
