@@ -3,11 +3,6 @@ plugins {
 }
 
 android {
-    sourceSets {
-        main {
-            java.srcDirs = ['src/main/java', '../com']
-        }
-    }
     namespace 'com.metmc.os.next'
     compileSdk 36
 
@@ -15,16 +10,16 @@ android {
         applicationId 'com.metmc.os.next'
         minSdk 31
         targetSdk 36
-        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '4').toInteger()
+        versionCode ((System.getenv('GITHUB_RUN_NUMBER') ?: '4') as Integer)
         versionName '1.2.0'
     }
 
     signingConfigs {
         release {
             storeFile rootProject.file('metmc-release.jks')
-            storePassword System.getenv('METMC_KEYSTORE_PASSWORD')
-            keyAlias System.getenv('METMC_KEY_ALIAS')
-            keyPassword System.getenv('METMC_KEY_PASSWORD')
+            storePassword (System.getenv('METMC_KEYSTORE_PASSWORD') ?: '')
+            keyAlias (System.getenv('METMC_KEY_ALIAS') ?: '')
+            keyPassword (System.getenv('METMC_KEY_PASSWORD') ?: '')
             enableV1Signing true
             enableV2Signing true
             enableV3Signing true
