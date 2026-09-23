@@ -369,7 +369,10 @@ public class MainActivity extends Activity {
         desktop.syncTerminalOverlay();
         if (terminalPanel == null) return;
         terminalPanel.start();
-        new Handler(Looper.getMainLooper()).postDelayed(() -> terminalPanel.send(command + "\r"), 700);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            MetmcTerminalPanel panel = terminalPanel;
+            if (panel != null) panel.send(command + "\r");
+        }, 700);
     }
 
     void startTerminalShell() {
@@ -1741,7 +1744,8 @@ public class MainActivity extends Activity {
         void drawAppIconSimple(Canvas c,float x,float y){drawAppIcon(c,x,y,"Android");}
 
         @Override public boolean onTouchEvent(MotionEvent e){
-            float x=e.getX(),y=e.getY();int h=getHeight(),w=getWidth();
+            try {
+                float x=e.getX(),y=e.getY();int h=getHeight(),w=getWidth();
             if(e.getAction()==MotionEvent.ACTION_DOWN){
                 downX=x;downY=y;lastTouchY=y;
                 gestureMoved=false; pendingFilePath=null; pendingAppIndex=-1;
@@ -2160,6 +2164,11 @@ public class MainActivity extends Activity {
             }
 
             return true;
+            } catch (Throwable ex) {
+                Log.e("METMC","Desktop touch handler failed",ex);
+                try { addNotification("Desktop input recovered from an error: "+ex.getClass().getSimpleName()); invalidate(); } catch(Throwable ignored) {}
+                return true;
+            }
         }
 
         WindowState windowAt(float x,float y){
