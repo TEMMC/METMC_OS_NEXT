@@ -495,7 +495,7 @@ public class MainActivity extends Activity {
 
     void buildTerminalOverlay() {
         if (terminalPanel != null) return;
-        terminalPanel = new MetmcTerminalPanel(this);
+        terminalPanel = new MetmcTerminalPanel(getApplicationContext());
         FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-1);
         tp.leftMargin=12; tp.rightMargin=12; tp.topMargin=52; tp.bottomMargin=92;
         root.addView(terminalPanel,tp);
