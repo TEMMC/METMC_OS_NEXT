@@ -608,7 +608,13 @@ public class MainActivity extends Activity {
         }
 
         void refreshAndroidApps(){
-            androidApps.clear(); androidApps.addAll(getAndroidApps());
+            try {
+                androidApps.clear();
+                androidApps.addAll(getAndroidApps());
+            } catch(Throwable ex) {
+                Log.e("METMC","Android app refresh failed",ex);
+                androidApps.clear();
+            }
             float rows=(float)Math.ceil((6+androidApps.size())/3.0);
             appsContentHeight=rows*122f;
             float max=Math.max(0,appsContentHeight-(getHeight()-270));
@@ -831,7 +837,17 @@ public class MainActivity extends Activity {
         String appSubtitle(String s){if(s.equals("Files"))return"File manager";if(s.equals("Terminal"))return"Native Debian terminal";if(s.equals("Browser"))return"Web browser";if(s.equals("Settings"))return"System controls";if(s.equals("Media"))return"Media player";return"Linux integration";}
 
         void drawAndroidIcon(Canvas c,float x,float y,ResolveInfo r){
-            Drawable d=r.loadIcon(getPackageManager()); if(d!=null){d.setBounds((int)x,(int)y,(int)x+40,(int)y+40); d.draw(c);} else drawAppIcon(c,x,y,"Android");
+            try {
+                Drawable d=r==null?null:r.loadIcon(getPackageManager());
+                if(d!=null){
+                    d.setBounds((int)x,(int)y,(int)x+40,(int)y+40);
+                    d.draw(c);
+                    return;
+                }
+            } catch(Throwable ex) {
+                Log.w("METMC","Android icon failed",ex);
+            }
+            drawAppIcon(c,x,y,"Android");
         }
 
         void drawAppIcon(Canvas c,float x,float y,String s){
@@ -966,11 +982,16 @@ public class MainActivity extends Activity {
         WindowState windowFor(String title){
             WindowState ws=windows.get(title);
             if(ws==null){
-                float ww=Math.min(620,getWidth()-36);
-                float hh=Math.min(title.equals("Settings") ? 560 : 430,getHeight()-150);
-                float l=Math.max(18,(getWidth()-ww)/2f), t=72;
+                float sw=Math.max(320,getWidth());
+                float sh=Math.max(320,getHeight());
+                float ww=Math.min(620,Math.max(MIN_W,sw-36));
+                float hh=Math.min(title.equals("Settings") ? 560 : 430,Math.max(MIN_H,sh-150));
+                float l=Math.max(18,(sw-ww)/2f), t=72;
                 ws=new WindowState(title,l,t,l+ww,t+hh);
+                clampWindow(ws);
                 windows.put(title,ws);
+            } else {
+                clampWindow(ws);
             }
             return ws;
         }
@@ -2208,6 +2229,8 @@ public class MainActivity extends Activity {
         }
 
         void showWindow(String name){
+            try {
+            if(name==null || name.trim().isEmpty()) return;
             if("Files".equals(name) && android.os.Build.VERSION.SDK_INT>=30 && !android.os.Environment.isExternalStorageManager()){
                 try{
                     Intent i=new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
@@ -2228,6 +2251,11 @@ public class MainActivity extends Activity {
             resetSurfaceScroll();
             if(name.equals("Terminal"))postDelayed(()->{buildTerminalOverlay();syncTerminalOverlay();},80);
             invalidate();
+            } catch(Throwable ex) {
+                Log.e("METMC","Open window failed: "+name,ex);
+                surface=Surface.DESKTOP;
+                invalidate();
+            }
         }
     }
 }
