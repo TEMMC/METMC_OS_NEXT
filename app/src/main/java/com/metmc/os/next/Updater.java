@@ -28,8 +28,8 @@ public class Updater {
                 if(c.getResponseCode()!=200) throw new IOException("No published release yet");
                 JSONObject o=new JSONObject(read(c.getInputStream()));
                 int remoteCode=parseVersionCode(o.optString("tag_name"));
-                String localVersion=a.getPackageManager().getPackageInfo(a.getPackageName(),0).versionName;
-                int localCode=parseVersionCode(localVersion);
+                android.content.pm.PackageInfo pi=a.getPackageManager().getPackageInfo(a.getPackageName(),0);
+                int localCode=pi.versionCode;
                 if(remoteCode<=localCode){
                     if(!automatic) a.runOnUiThread(()->msg("METMC OS NEXT","You are already running the latest version."));
                     return;
@@ -59,6 +59,8 @@ public class Updater {
 
     int parseVersionCode(String tag){
         try{
+            java.util.regex.Matcher m=java.util.regex.Pattern.compile("\\.build\\.(\\d+)$").matcher(tag);
+            if(m.find()) return Integer.parseInt(m.group(1));
             String v=tag.startsWith("v")?tag.substring(1):tag;
             String[] p=v.split("\\.");
             int major=Integer.parseInt(p[0]);
