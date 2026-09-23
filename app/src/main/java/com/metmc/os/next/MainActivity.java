@@ -570,6 +570,7 @@ public class MainActivity extends Activity {
         float appsContentHeight=0;
         float surfaceScroll=0;
         float windowScroll=0;
+        float applicationsWindowScroll=0;
         boolean scrollingSurface=false;
         boolean scrollingWindow=false;
         String scrollingWindowTitle=null;
@@ -1081,7 +1082,7 @@ public class MainActivity extends Activity {
 
             c.save();
             c.clipRect(l+10,t+52,rr-10,bb-10);
-            if(!title.equals("Terminal")) c.translate(0,-windowScroll);
+            if(!title.equals("Terminal")) c.translate(0,-("Applications".equals(title) ? applicationsWindowScroll : windowScroll));
             if(title.equals("Terminal")){
                 text(c,"DEBIAN  •  /bin/bash  •  /data/local/linux/rootfs",l+28,t+82,10,0xff7f9b8b);
             } else if(title.equals("Files")){
@@ -1110,7 +1111,8 @@ public class MainActivity extends Activity {
             if(!title.equals("Terminal") && windowScrollMax(title,ws)>0){
                 float trackTop=t+58,trackBottom=bb-14,trackH=trackBottom-trackTop;
                 float thumbH=Math.max(28,trackH*(trackH/windowContentHeight(title,ws)));
-                float thumbY=trackTop+(trackH-thumbH)*(windowScroll/windowScrollMax(title,ws));
+                float activeWindowScroll="Applications".equals(title) ? applicationsWindowScroll : windowScroll;
+                float thumbY=trackTop+(trackH-thumbH)*(activeWindowScroll/windowScrollMax(title,ws));
                 round(c,rr-12,trackTop,rr-7,trackBottom,3,0x334f6478);
                 round(c,rr-12,thumbY,rr-7,thumbY+thumbH,3,0xff6d8195);
             }
@@ -1825,7 +1827,8 @@ public class MainActivity extends Activity {
                     }
                     if(hit!=null){
                         if(!hit.title.equals(lastWindowTapTitle)){
-                            windowScroll=0;
+                            if("Applications".equals(hit.title)) applicationsWindowScroll=0;
+                            else windowScroll=0;
                             lastWindowTapTitle=hit.title;
                         }
                         bringToFront(hit.title);
@@ -1885,11 +1888,11 @@ public class MainActivity extends Activity {
                         }
                         if("Applications".equals(hit.title) && y>hit.t+54 && y<hit.b-10){
                             float cw=(hit.r-hit.l-48)/3f;
-                            float localY=y-hit.t-62+windowScroll;
+                            float localY=y-hit.t-62+applicationsWindowScroll;
                             int col=(int)((x-(hit.l+16))/(cw+8));
                             int row=(int)(localY/116f);
                             int ai=row*3+col;
-                            float cardX=hit.l+16+col*(cw+8), cardY=hit.t+62+row*116-windowScroll;
+                            float cardX=hit.l+16+col*(cw+8), cardY=hit.t+62+row*116-applicationsWindowScroll;
                             if(col>=0&&col<3&&row>=0&&ai>=0&&ai<6+androidApps.size()
                                     &&x>=cardX&&x<=cardX+cw&&y>=cardY&&y<=cardY+104){
                                 pendingAppIndex=ai;
@@ -2020,7 +2023,7 @@ public class MainActivity extends Activity {
                 if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){
                     WindowState sws=windows.get(scrollingWindowTitle);
                     if(sws!=null){
-                        windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll));
+                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }
                         lastTouchY=y; invalidate(); return true;
                     }
                 }
@@ -2290,7 +2293,7 @@ public class MainActivity extends Activity {
             if(list==null){ list=new ArrayList<>(); workspaceWindows.put(currentWorkspace,list); }
             if(!list.contains(name)) list.add(name);
             WindowState ws=windowFor(name);
-            if(!openWindows.contains(name))openWindows.add(name);
+            if(!openWindows.contains(name)){ openWindows.add(name); if("Applications".equals(name)) applicationsWindowScroll=0; }
             recentItems.remove(name); recentItems.add(0,name);
             addNotification(name+" opened");
             while(recentItems.size()>12)recentItems.remove(recentItems.size()-1);
