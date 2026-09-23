@@ -1812,7 +1812,10 @@ public class MainActivity extends Activity {
                         }
                     }
                     if(hit!=null){
-                        if(!hit.title.equals(scrollingWindowTitle)) windowScroll=0;
+                        if(!hit.title.equals(lastWindowTapTitle)){
+                            windowScroll=0;
+                            lastWindowTapTitle=hit.title;
+                        }
                         bringToFront(hit.title);
                         float rr=hit.r,bb=hit.b;
                         // Remember which window can scroll, but do not mark it as scrolling until
