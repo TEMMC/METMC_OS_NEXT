@@ -35,7 +35,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
         if(session!=null && session.isRunning()) return;
         try {
             String script="for SU in /debug_ramdisk/su /sbin/su /debug_ramdisk/magisk /sbin/magisk /data/adb/magisk/su /system/bin/su /system/xbin/su; do " +
-                    "if [ -x \"$SU\" ]; then exec \"$SU\" --mount-master -c '" +
+                    "if [ -x \"$SU\" ]; then exec \"$SU\" -c '" +
                     "R=/data/local/linux/rootfs; " +
                     "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
                     "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
