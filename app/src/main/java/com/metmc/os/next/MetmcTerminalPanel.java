@@ -30,23 +30,37 @@ public final class MetmcTerminalPanel extends FrameLayout {
 
     public void start(){
         if(session!=null && session.isRunning()) return;
-        String command="export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; "+
-                "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; "+
-                "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; "+
-                "exec chroot "+ROOTFS+" /bin/bash --login";
-        String[] args={"-c",command};
-        String[] env={
-                "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
-                "LC_ALL=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                "SHELL=/bin/bash"
-        };
-        session=new TerminalSession("/system/bin/su",ROOTFS,args,env,5000,new SessionClient());
-        terminalView.attachSession(session);
-        terminalView.requestFocus();
-        postDelayed(()->{
-            InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-            if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
-        },300);
+        try {
+            String command="export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; "+
+                    "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; "+
+                    "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; "+
+                    "exec chroot "+ROOTFS+" /bin/bash --login";
+            String[] args={"-c",command};
+            String[] env={
+                    "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
+                    "LC_ALL=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                    "SHELL=/bin/bash"
+            };
+            session=new TerminalSession("/system/bin/su",ROOTFS,args,env,5000,new SessionClient());
+            terminalView.attachSession(session);
+            terminalView.requestFocus();
+            postDelayed(()->{
+                try {
+                    InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                    if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
+                } catch(Exception ignored) {}
+            },300);
+        } catch(Exception ex) {
+            session=null;
+            android.util.Log.e("METMC","Terminal start failed",ex);
+            removeAllViews();
+            TextView fallback=new TextView(getContext());
+            fallback.setText("METMC Terminal\n\nUnable to start the Debian terminal.\nThe desktop remains running.");
+            fallback.setTextColor(Color.WHITE);
+            fallback.setTextSize(14);
+            fallback.setPadding(24,24,24,24);
+            addView(fallback,new LayoutParams(-1,-1));
+        }
     }
 
     public void stop(){
