@@ -8,6 +8,7 @@ import android.graphics.drawable.*;
 import android.net.Uri;
 import androidx.core.content.FileProvider;
 import android.os.*;
+import android.util.Log;
 import android.view.*;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
@@ -680,6 +681,7 @@ public class MainActivity extends Activity {
             else if(surface==Surface.WALLPAPER) drawWallpaperManager(c,w,h);
             else if(surface==Surface.CLIPBOARD) drawClipboard(c,w,h);
             if(surface==Surface.DESKTOP) { drawAllWindows(c,w,h); drawDock(c,w,h); }
+        }catch(Exception ex){ Log.e("METMC","Desktop draw failed",ex); surface=Surface.DESKTOP; try{c.drawColor(Color.rgb(5,8,10)); text(c,"METMC OS recovered from a window error",24,90,16,Color.WHITE);}catch(Exception ignored){} }
         }
 
         Bitmap customWallpaper;
