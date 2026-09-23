@@ -9,6 +9,7 @@ import android.net.Uri;
 import androidx.core.content.FileProvider;
 import android.os.*;
 import android.view.*;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import java.io.*;
 import java.text.*;
@@ -463,7 +464,7 @@ public class MainActivity extends Activity {
         if(terminalInput!=null){ terminalInput.requestFocus(); terminalInput.onTextContextMenuItem(android.R.id.paste); }
     }
     void terminalSelectAll(){
-        if(terminalOutput!=null) terminalOutput.selectAll();
+        if(terminalOutput!=null) terminalOutput.onTextContextMenuItem(android.R.id.selectAll);
     }
     void terminalClearScreen(){
         if(terminalOutput!=null){ terminalOutput.setText(""); terminalOutput.postInvalidate(); }
