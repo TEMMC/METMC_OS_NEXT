@@ -267,6 +267,13 @@ public class MainActivity extends Activity {
         }
     }
 
+    void showAbout() {
+        new AlertDialog.Builder(this)
+            .setTitle("About METMC OS NEXT")
+            .setMessage("METMC OS NEXT\\n\\nCreated by Tinotenda Enock Mapfumo (Dr TEMMC).\\n\\nAndroid + Debian desktop environment with native METMC windows, Linux terminal integration, application launcher, file manager, security and self-update support.")
+            .setPositiveButton("OK",null).show();
+    }
+
     void openMediaPicker(){
         try{
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -895,8 +902,8 @@ public class MainActivity extends Activity {
         void drawSettings(Canvas c,int w,int h){
             overlay(c,w,h); bold(c,"Settings",30,91,26,Color.WHITE);
             text(c,"METMC OS NEXT control center",30,116,12,0xff8f9bad);
-            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session","System Monitor","Process Manager","Power & Device","Accessibility"};
-            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart","CPU, RAM, storage, battery and network","Running Android/Linux processes","Power controls and Android device settings","Accessibility and input settings"};
+            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session","System Monitor","Process Manager","Power & Device","Accessibility","About"};
+            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart","CPU, RAM, storage, battery and network","Running Android/Linux processes","Power controls and Android device settings","Accessibility and input settings","Tinotenda Enock Mapfumo (Dr TEMMC)"};
             for(int i=0;i<groups.length;i++){
                 float y=136+i*57;
                 round(c,28,y,w-28,y+49,14,0xff151d27);
@@ -1051,7 +1058,7 @@ public class MainActivity extends Activity {
             return Math.max(2,Math.min(4,(int)(available/150f)));
         }
         float windowContentHeight(String title,WindowState ws){
-            if("Settings".equals(title)) return 62f+12f*52f+40f;
+            if("Settings".equals(title)) return 62f+13f*52f+40f;
             if("Applications".equals(title)) return 62f+(float)Math.ceil((6+androidApps.size())/3.0)*116f+50f;
             if("Notifications".equals(title)) return 68f+Math.max(1,Math.min(30,notifications.size()))*42f+40f;
             if("Clipboard".equals(title)) return 68f+Math.max(1,Math.min(20,clipboardHistory.size()))*40f+40f;
@@ -1077,8 +1084,8 @@ public class MainActivity extends Activity {
         float windowScrollMax(String title,WindowState ws){ return Math.max(0,windowContentHeight(title,ws)-(ws.b-ws.t-62)); }
 
         void drawSettingsWindowContent(Canvas c,float l,float t,float r,float b){
-            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session"};
-            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart"};
+            String[] groups={"Appearance","Desktop & Workspaces","Applications","Linux integration","Security","System Update","Clipboard","Session","System Monitor","Process Manager","Power & Device","Accessibility","About"};
+            String[] desc={"Wallpaper and visual themes","Workspaces, dock and window behavior","Installed Android + METMC apps","Debian terminal and Linux applications","Lock-screen and security controls","Check for a newer build","Clipboard history and paste tools","Restore windows after restart","CPU, RAM and storage telemetry","Running Android/Linux processes","Android device controls","Accessibility and input settings","Tinotenda Enock Mapfumo (Dr TEMMC)"};
             c.save();
             c.clipRect(l+14,t+54,r-14,b-12);
             for(int i=0;i<groups.length;i++){
@@ -1701,6 +1708,7 @@ public class MainActivity extends Activity {
                             else if(setting==9) showWindow("Process Manager");
                             else if(setting==10) showWindow("Power & Device");
                             else if(setting==11) showWindow("Accessibility");
+                            else if(setting==12) showAbout();
                             invalidate();
                             return true;
                         }
@@ -2019,12 +2027,12 @@ public class MainActivity extends Activity {
             }
 
             if(surface==Surface.SETTINGS){
-                for(int i=0;i<12;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){
+                for(int i=0;i<13;i++){float yy=136+i*57;if(y>=yy&&y<=yy+49){
                     if(i==0)showWindow("Wallpaper Manager");else if(i==1)showWindow("Desktop & Workspaces");
                     else if(i==2)showWindow("Applications");else if(i==3)showWindow("Linux Apps");else if(i==4)openSecurity();
                     else if(i==5)showWindow("System Update");else if(i==6)showWindow("Clipboard");else if(i==7)showWindow("Session Manager");
                     else if(i==8)showWindow("System Monitor");else if(i==9)showWindow("Process Manager");
-                    else if(i==10)showWindow("Power & Device");else if(i==11)showWindow("Accessibility");
+                    else if(i==10)showWindow("Power & Device");else if(i==11)showWindow("Accessibility");else if(i==12)showAbout();
                     invalidate();return true;
                 }}
             }
