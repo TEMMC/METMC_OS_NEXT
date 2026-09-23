@@ -45,8 +45,9 @@ public class Updater {
                 }
                 final String u=url,n=name,tag=o.optString("tag_name");
                 if(u==null){a.runOnUiThread(()->msg("Updater","Release "+tag+" has no production APK."));return;}
-                if(automatic) download(u,n,true);
-                else a.runOnUiThread(()->new AlertDialog.Builder(a)
+                if(automatic) {
+                    a.runOnUiThread(() -> msg("METMC OS NEXT Update", "Version "+tag+" is available. Open Settings → System Update to review and install it."));
+                } else a.runOnUiThread(()->new AlertDialog.Builder(a)
                     .setTitle("METMC OS NEXT Update")
                     .setMessage("Version "+tag+" is available. Download and install it?")
                     .setPositiveButton("Update",(d,w)->download(u,n,true))
