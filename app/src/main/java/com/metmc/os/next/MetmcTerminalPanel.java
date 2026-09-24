@@ -51,7 +51,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
                     "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
                     "export HOME=/root TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 SHELL=/bin/bash; " +
                     "cd /root 2>/dev/null || cd /; " +
-                    "exec chroot \"$R\" /bin/bash --login";
+                    "exec /system/bin/chroot \"$R\" /bin/bash --login";
             String exe=null;
             String[] args=null;
             String[] magiskCandidates={
