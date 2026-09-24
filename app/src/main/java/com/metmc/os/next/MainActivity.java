@@ -1817,7 +1817,7 @@ public class MainActivity extends Activity {
                             ArrayList<String> entries=new ArrayList<>(fileEntries.values());
                             if(col>=0&&col<columns&&row>=0&&idx>=0&&idx<entries.size()
                                     &&x>=tileX&&x<=tileX+tileW&&y>=tileY&&y<=tileY+tileH){
-                                pendingFilePath=entries.get(idx); return true;
+                                pendingFilePath=entries.get(idx);
                             }
                         }
                     }
