@@ -23,8 +23,6 @@ jobs:
           main = Path('app/src/main/java/com/metmc/os/next/MainActivity.java')
           s = main.read_text()
 
-          # Make the launcher Intent a real local variable. The previous build-time
-          # Gradle rewrite hid this source defect and made the repository fragile.
           old = '''        PackageManager pm = getPackageManager();
           LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
           launcher.addCategory(Intent.CATEGORY_LAUNCHER);'''
@@ -37,13 +35,9 @@ jobs:
           elif 'Intent launcher = new Intent(Intent.ACTION_MAIN);' not in s:
               raise SystemExit('launcher source pattern not found')
 
-          # Use MATCH_ALL for the launcher query so Android's resolver does not
-          # discard launchable activities that do not advertise CATEGORY_DEFAULT.
           s = s.replace('pm.queryIntentActivities(launcher, PackageManager.MATCH_DEFAULT_ONLY)',
                         'pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)')
 
-          # Make window scrolling deterministic: once a scroll starts, do not let
-          # the pending-card click path consume the gesture.
           old = '''                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
                             scrollingWindowTitle=hit.title;
                         }'''
@@ -57,7 +51,6 @@ jobs:
           if old in s:
               s = s.replace(old, new, 1)
 
-          # Add generic scroll-wheel/two-finger support for the same custom windows.
           marker = '''        WindowState windowAt(float x,float y){'''
           method = '''        @Override public boolean onGenericMotionEvent(MotionEvent event){
             try{
@@ -87,14 +80,10 @@ jobs:
               raise SystemExit('windowAt marker not found')
           if 'onGenericMotionEvent(MotionEvent event)' not in s:
               s = s.replace(marker, method + marker, 1)
-
           main.write_text(s)
 
           panel = Path('app/src/main/java/com/metmc/os/next/MetmcTerminalPanel.java')
           p = panel.read_text()
-
-          # Magisk's supported temporary root path is /sbin or /debug_ramdisk;
-          # /data/adb/magisk is intentionally inaccessible to ordinary app UIDs.
           old = '''            String script="SU=; " +
                     "for C in /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su; do " +'''
           new = '''            String script="SU=; " +
@@ -102,7 +91,6 @@ jobs:
           if old in p:
               p = p.replace(old, new, 1)
 
-          # Resolve Magisk's actual tmpfs path when the fixed paths are absent.
           old = '''                    "if [ -z \"$SU\" ] && command -v su >/dev/null 2>&1; then SU=\"$(command -v su)\"; fi; " +
                     "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su was not exposed to this process.'; exit 1; fi; " +'''
           new = '''                    "if [ -z \"$SU\" ] && [ -x /system/bin/magisk ]; then MT=\"$(/system/bin/magisk --path 2>/dev/null)\"; [ -x \"$MT/su\" ] && SU=\"$MT/su\"; fi; " +
@@ -111,8 +99,6 @@ jobs:
           if old in p:
               p = p.replace(old, new, 1)
 
-          # Ensure the Termux TerminalView itself owns touch/focus and the IME can
-          # deliver characters to the PTY instead of the desktop canvas.
           old = '''        terminalView.setFocusable(true);
         terminalView.setFocusableInTouchMode(true);
     }'''
@@ -133,7 +119,6 @@ jobs:
               p = p.replace(old, new, 1)
           panel.write_text(p)
 
-          # Remove the old build-time source mutation. Source must compile as checked in.
           gradle = Path('app/build.gradle')
           g = gradle.read_text()
           start = g.find('// Keep the current MainActivity source compatible')
@@ -142,7 +127,6 @@ jobs:
               g = g[:start] + g[end:]
           gradle.write_text(g)
 
-          # This workflow is one-shot; remove it from the repaired source tree.
           Path('.github/workflows/repair-next.yml').unlink()
           PY
 
@@ -154,3 +138,5 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "Fix terminal root startup and native window scrolling"
           git push origin HEAD:main
+
+# One-shot source repair; this workflow deletes itself after the repair commit.
