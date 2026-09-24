@@ -11,7 +11,7 @@ android {
         minSdk 31
         targetSdk 36
         versionCode ((System.getenv('GITHUB_RUN_NUMBER') ?: '4') as Integer)
-        versionName '1.2.0'
+        versionName '1.2.1'
     }
 
     signingConfigs {
@@ -41,11 +41,15 @@ android {
     }
 }
 
+// ProfileInstaller is optional for METMC OS NEXT and has caused a runtime
+// crash on the target device when its transitive AndroidX concurrency class
+// is not packaged. Exclude it completely instead of allowing Startup to run it.
+configurations.configureEach {
+    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'
+}
+
 dependencies {
     implementation 'androidx.core:core:1.17.0'
-    // ProfileInstaller references AbstractResolvableFuture at runtime.
-    // Pin the AndroidX concurrency implementation explicitly so the class
-    // is packaged even when dependency resolution/deduplication changes.
     implementation 'androidx.concurrent:concurrent-futures:1.3.0'
     implementation 'com.termux.termux-app:terminal-view:0.118.0'
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
