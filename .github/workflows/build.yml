@@ -15,23 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # BEGIN ONE-TIME SOURCE REPAIR
-      - name: Normalize checked-in source
-        run: python3 tools/repair_source.py
-
-      - name: Commit normalized source
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/java/com/metmc/os/next/MainActivity.java app/src/main/java/com/metmc/os/next/MetmcTerminalPanel.java app/build.gradle .github/workflows/build.yml tools/repair_source.py
-          if git diff --cached --quiet; then
-            echo "Source already normalized."
-          else
-            git commit -m "Fix terminal root startup and native window scrolling"
-            git push origin HEAD:main
-          fi
-      # END ONE-TIME SOURCE REPAIR
-
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
