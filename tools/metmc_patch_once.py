@@ -1,3 +1,37 @@
 from pathlib import Path
-p=Path('app/src/main/java/com/metmc/osnext/MainActivity.java')
-# placeholder
+p=Path('app/src/main/java/com/metmc/os/next/MetmcTerminalPanel.java'); s=p.read_text(); a=s.index('    public void start(){'); b=s.index('\n    private void showKeyboard()',a)
+new='''    public void start(){
+        if(session!=null && session.isRunning()){ terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard(); return; }
+        try{
+            String script="R=/data/local/linux/rootfs; test -x \\\"$R/bin/bash\\\" || { echo '[METMC] Debian rootfs /bin/bash is missing.'; exit 1; }; mkdir -p \\\"$R/dev\\\" \\\"$R/dev/pts\\\" \\\"$R/proc\\\" \\\"$R/sys\\\" \\\"$R/tmp\\\" \\\"$R/run\\\"; mountpoint -q \\\"$R/dev\\\" 2>/dev/null || mount --bind /dev \\\"$R/dev\\\" 2>/dev/null || true; mountpoint -q \\\"$R/dev/pts\\\" 2>/dev/null || mount --bind /dev/pts \\\"$R/dev/pts\\\" 2>/dev/null || true; mountpoint -q \\\"$R/proc\\\" 2>/dev/null || mount -t proc proc \\\"$R/proc\\\" 2>/dev/null || true; mountpoint -q \\\"$R/sys\\\" 2>/dev/null || mount -t sysfs sys \\\"$R/sys\\\" 2>/dev/null || true; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export HOME=/root TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 SHELL=/bin/bash; cd /root 2>/dev/null || cd /; exec chroot \\\"$R\\\" /bin/bash --login";
+            String exe=null; String[] args;
+            if(new java.io.File("/system/bin/magisk").canExecute()){ exe="/system/bin/magisk"; args=new String[]{"su","-M","-c",script}; }
+            else{ String[] cs={"/debug_ramdisk/su","/sbin/su","/system/xbin/su","/system/bin/su","/system/product/bin/su"}; for(String c:cs) if(new java.io.File(c).canExecute()){exe=c;break;} if(exe==null) throw new IOException("Magisk root entry point is unavailable"); args=new String[]{"-M","-c",script}; }
+            String[] env={"TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8","LC_ALL=C.UTF-8","SHELL=/bin/bash","PATH=/data/adb/magisk:/debug_ramdisk:/sbin:/system/bin:/system/xbin:/system/product/bin:/usr/bin:/bin"};
+            session=new TerminalSession(exe,"/",args,env,5000,new SessionClient()); terminalView.attachSession(session); terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard();
+        }catch(Exception ex){ session=null; android.util.Log.e("METMC","Terminal start failed",ex); removeAllViews(); TextView v=new TextView(getContext()); v.setText("METMC Terminal\\n\\nUnable to start the Debian terminal.\\n"+ex.getMessage()); v.setTextColor(Color.WHITE); v.setTextSize(14); v.setPadding(24,24,24,24); addView(v,new LayoutParams(-1,-1)); }
+    }
+'''
+p.write_text(s[:a]+new+s[b:])
+p=Path('app/src/main/java/com/metmc/os/next/MainActivity.java'); s=p.read_text()
+s=s.replace('String scrollingWindowTitle=null;\n        long lastWindowTapTime=0;','String scrollingWindowTitle=null;\n        boolean draggingWindowScrollbar=false;\n        long lastWindowTapTime=0;',1)
+s=s.replace('if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){\n                            scrollingWindowTitle=hit.title;\n                        }\n                        if(("Applications".equals(hit.title) || "Files".equals(hit.title))\n                                && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){\n                            scrollingWindowTitle=hit.title;\n                        }','if(y>hit.t+54 && y<hit.b-12){ scrollingWindowTitle=hit.title; if(!"Terminal".equals(hit.title) && windowScrollMax(hit.title,hit)>0 && x>=hit.r-24){ draggingWindowScrollbar=true; lastTouchY=y; return true; } }',1)
+s=s.replace('if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){\n                    scrollingWindow=true;\n                }','if(surface==Surface.DESKTOP && draggingWindowScrollbar && scrollingWindowTitle!=null){ WindowState sws=windows.get(scrollingWindowTitle); if(sws!=null){ float max=windowScrollMax(scrollingWindowTitle,sws), top=sws.t+58, track=Math.max(1,sws.b-14-top), content=windowContentHeight(scrollingWindowTitle,sws), thumb=Math.max(28,track*(track/content)), usable=Math.max(1,track-thumb), next=(y-top-thumb/2f)/usable*max; if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,next)); else windowScroll=Math.max(0,Math.min(max,next)); lastTouchY=y; invalidate(); return true; } }\n                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){ scrollingWindow=true; pendingFilePath=null; pendingAppIndex=-1; draggingWindow=null; }',1)
+s=s.replace('if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){\n                    WindowState sws=windows.get(scrollingWindowTitle);\n                    if(sws!=null){\n                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); invalidate(); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }\n                        lastTouchY=y; invalidate(); return true;\n                    }\n                }','if(surface==Surface.DESKTOP&&scrollingWindow&&scrollingWindowTitle!=null){ WindowState sws=windows.get(scrollingWindowTitle); if(sws!=null){ float max=windowScrollMax(scrollingWindowTitle,sws); if(max>0){ if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,applicationsWindowScroll+dy)); else windowScroll=Math.max(0,Math.min(max,windowScroll+dy)); } lastTouchY=y; invalidate(); return true; } }',1)
+s=s.replace('if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; return true; }\n                if(scrollingWindow){ scrollingWindow=false; scrollingWindowTitle=null; return true; }','if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }\n                if(scrollingWindow||draggingWindowScrollbar){ scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }',1)
+p.write_text(s)
+p=Path('app/build.gradle'); s=p.read_text(); s=s.replace("configurations.configureEach {\n    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'\n}","configurations.configureEach {\n    resolutionStrategy.force 'androidx.concurrent:concurrent-futures:1.3.0'\n    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'\n}",1); p.write_text(s)
+p=Path('app/src/main/AndroidManifest.xml'); s=p.read_text(); old='''        <!-- ProfileInstaller is not required by METMC OS NEXT. Remove the
+             AndroidX Startup provider contributed by ProfileInstaller so its
+             background initializer can never execute at runtime. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            tools:node="remove"/>'''; new='''        <!-- ProfileInstaller is optional; disable only its delayed initializer. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data android:name="androidx.profileinstaller.ProfileInstallerInitializer" tools:node="remove"/>
+        </provider>'''; assert old in s; p.write_text(s.replace(old,new,1))
