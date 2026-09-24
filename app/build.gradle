@@ -47,36 +47,6 @@ configurations.configureEach {
     exclude group: 'androidx.profileinstaller', module: 'profileinstaller'
 }
 
-// Keep the current MainActivity source compatible with the stable app-discovery
-// implementation already present on main. The declaration was accidentally
-// dropped in an earlier patch; repair it before Java compilation without
-// changing unrelated source files.
-tasks.register('patchMainActivitySource') {
-    doLast {
-        def source = file('src/main/java/com/metmc/os/next/MainActivity.java')
-        def text = source.getText('UTF-8')
-        def oldBlock = '''    ArrayList<ResolveInfo> getAndroidApps() {
-        PackageManager pm = getPackageManager();
-        LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
-        launcher.addCategory(Intent.CATEGORY_LAUNCHER);'''
-        def newBlock = '''    ArrayList<ResolveInfo> getAndroidApps() {
-        PackageManager pm = getPackageManager();
-        LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
-        Intent launcher = new Intent(Intent.ACTION_MAIN);
-        launcher.addCategory(Intent.CATEGORY_LAUNCHER);'''
-        if (!text.contains('Intent launcher = new Intent(Intent.ACTION_MAIN);')) {
-            if (!text.contains(oldBlock)) {
-                throw new GradleException('MainActivity getAndroidApps source pattern was not found')
-            }
-            source.write(text.replace(oldBlock, newBlock), 'UTF-8')
-        }
-    }
-}
-
-tasks.named('preBuild') {
-    dependsOn('patchMainActivitySource')
-}
-
 dependencies {
     implementation 'androidx.core:core:1.17.0'
     implementation 'androidx.concurrent:concurrent-futures:1.3.0'

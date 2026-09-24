@@ -199,9 +199,10 @@ public class MainActivity extends Activity {
     ArrayList<ResolveInfo> getAndroidApps() {
         PackageManager pm = getPackageManager();
         LinkedHashMap<String,ResolveInfo> found = new LinkedHashMap<>();
+        Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
         try {
-            for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_DEFAULT_ONLY)) {
+            for (ResolveInfo r : pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)) {
                 if (r == null || r.activityInfo == null) continue;
                 String pkg = r.activityInfo.packageName;
                 String name = r.activityInfo.name;
@@ -1832,6 +1833,10 @@ public class MainActivity extends Activity {
                         if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
                             scrollingWindowTitle=hit.title;
                         }
+                        if(("Applications".equals(hit.title) || "Files".equals(hit.title))
+                                && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
+                            scrollingWindowTitle=hit.title;
+                        }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62)+windowScroll)/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
@@ -2178,6 +2183,29 @@ public class MainActivity extends Activity {
                 try { addNotification("Desktop input recovered from an error: "+ex.getClass().getSimpleName()); invalidate(); } catch(Throwable ignored) {}
                 return true;
             }
+        }
+
+        @Override public boolean onGenericMotionEvent(MotionEvent event){
+            try{
+                if(event.getAction()==MotionEvent.ACTION_SCROLL){
+                    float x=event.getX(), y=event.getY();
+                    WindowState hit=windowAt(x,y);
+                    if(hit!=null && windowScrollMax(hit.title,hit)>0){
+                        float delta=event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+                        if(Math.abs(delta)>0.01f){
+                            if("Applications".equals(hit.title)){
+                                applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(hit.title,hit),applicationsWindowScroll-delta*72f));
+                            }else{
+                                windowScroll=Math.max(0,Math.min(windowScrollMax(hit.title,hit),windowScroll-delta*72f));
+                            }
+                            bringToFront(hit.title);
+                            invalidate();
+                            return true;
+                        }
+                    }
+                }
+            }catch(Throwable ex){ Log.w("METMC","Generic scroll failed",ex); }
+            return super.onGenericMotionEvent(event);
         }
 
         WindowState windowAt(float x,float y){

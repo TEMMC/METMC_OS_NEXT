@@ -45,10 +45,11 @@ public final class MetmcTerminalPanel extends FrameLayout {
             // only entry point: on Magisk 30.x the exposed su may be in the
             // Magisk tmpfs (/debug_ramdisk or /sbin).
             String script="SU=; " +
-                    "for C in /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su; do " +
+                    "for C in /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su /system/sbin/su; do " +
                     "if [ -x \"$C\" ]; then SU=\"$C\"; break; fi; done; " +
+                    "if [ -z \"$SU\" ] && [ -x /system/bin/magisk ]; then MT=\"$(/system/bin/magisk --path 2>/dev/null)\"; [ -x \"$MT/su\" ] && SU=\"$MT/su\"; fi; " +
                     "if [ -z \"$SU\" ] && command -v su >/dev/null 2>&1; then SU=\"$(command -v su)\"; fi; " +
-                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su was not exposed to this process.'; exit 1; fi; " +
+                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su is not exposed to METMC OS NEXT. Grant root access to METMC OS NEXT in Magisk, then reopen Terminal.'; exit 1; fi; " +
                     "exec \"$SU\" -c '" +
                     "R=/data/local/linux/rootfs; " +
                     "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
