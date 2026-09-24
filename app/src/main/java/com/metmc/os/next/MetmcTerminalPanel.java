@@ -6,6 +6,7 @@ import android.os.*;
 import android.view.*;
 import android.widget.FrameLayout;
 import android.widget.TextView;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import android.view.inputmethod.InputMethodManager;
 import com.termux.terminal.TerminalSession;
@@ -35,7 +36,7 @@ public final class MetmcTerminalPanel extends FrameLayout {
     public void start(){
         if(session!=null && session.isRunning()){ terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard(); return; }
         try{
-            String script="R=/data/local/linux/rootfs; test -x \"$R/bin/bash\" || { echo '[METMC] Debian rootfs /bin/bash is missing.'; exit 1; }; mkdir -p \"$R/dev\" \"$R/dev/pts\" \"$R/proc\" \"$R/sys\" \"$R/tmp\" \"$R/run\"; mountpoint -q \"$R/dev\" 2>/dev/null || mount --bind /dev \"$R/dev\" 2>/dev/null || true; mountpoint -q \"$R/dev/pts\" 2>/dev/null || mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; mountpoint -q \"$R/proc\" 2>/dev/null || mount -t proc proc \"$R/proc\" 2>/dev/null || true; mountpoint -q \"$R/sys\" 2>/dev/null || mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export HOME=/root TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 SHELL=/bin/bash; cd /root 2>/dev/null || cd /; exec chroot \"$R\" /bin/bash --login";
+            String script="R=/data/local/linux/rootfs; test -x \\\"$R/bin/bash\\\" || { echo '[METMC] Debian rootfs /bin/bash is missing.'; exit 1; }; mkdir -p \\\"$R/dev\\\" \\\"$R/dev/pts\\\" \\\"$R/proc\\\" \\\"$R/sys\\\" \\\"$R/tmp\\\" \\\"$R/run\\\"; mountpoint -q \\\"$R/dev\\\" 2>/dev/null || mount --bind /dev \\\"$R/dev\\\" 2>/dev/null || true; mountpoint -q \\\"$R/dev/pts\\\" 2>/dev/null || mount --bind /dev/pts \\\"$R/dev/pts\\\" 2>/dev/null || true; mountpoint -q \\\"$R/proc\\\" 2>/dev/null || mount -t proc proc \\\"$R/proc\\\" 2>/dev/null || true; mountpoint -q \\\"$R/sys\\\" 2>/dev/null || mount -t sysfs sys \\\"$R/sys\\\" 2>/dev/null || true; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export HOME=/root TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 SHELL=/bin/bash; cd /root 2>/dev/null || cd /; exec chroot \\\"$R\\\" /bin/bash --login";
             String exe=null; String[] args;
             if(new java.io.File("/system/bin/magisk").canExecute()){ exe="/system/bin/magisk"; args=new String[]{"su","-M","-c",script}; }
             else{ String[] cs={"/debug_ramdisk/su","/sbin/su","/system/xbin/su","/system/bin/su","/system/product/bin/su"}; for(String c:cs) if(new java.io.File(c).canExecute()){exe=c;break;} if(exe==null) throw new IOException("Magisk root entry point is unavailable"); args=new String[]{"-M","-c",script}; }
@@ -46,63 +47,20 @@ public final class MetmcTerminalPanel extends FrameLayout {
 
     private void showKeyboard(){
         postDelayed(()->{
-            try {
-                terminalView.requestFocusFromTouch();
-                terminalView.requestFocus();
-                InputMethodManager imm=(InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
-            } catch(Exception ignored) {}
+            try { terminalView.requestFocusFromTouch(); terminalView.requestFocus(); InputMethodManager imm=(InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE); if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT); } catch(Exception ignored) {}
         },250);
     }
-
-    public void stop(){
-        if(session!=null) session.finishIfRunning();
-        session=null;
-    }
-
-    public void send(String text){
-        if(session!=null && session.isRunning()) writeBytes(text);
-    }
-
-    public void sendCodePoint(int codePoint){
-        if(session!=null && session.isRunning()) session.writeCodePoint(false,codePoint);
-    }
-
-    private void writeBytes(String text){
-        if(session==null||!session.isRunning()||text==null)return;
-        byte[] b=text.getBytes(StandardCharsets.UTF_8);
-        session.write(b,0,b.length);
-    }
-
+    public void stop(){ if(session!=null) session.finishIfRunning(); session=null; }
+    public void send(String text){ if(session!=null && session.isRunning()) writeBytes(text); }
+    public void sendCodePoint(int codePoint){ if(session!=null && session.isRunning()) session.writeCodePoint(false,codePoint); }
+    private void writeBytes(String text){ if(session==null||!session.isRunning()||text==null)return; byte[] b=text.getBytes(StandardCharsets.UTF_8); session.write(b,0,b.length); }
     public void sendKey(String name){
-        if(session==null || !session.isRunning()) return;
-        String s=null;
-        if("ESC".equals(name)) s="\u001b";
-        else if("TAB".equals(name)) s="\t";
-        else if("ENTER".equals(name)) s="\r";
-        else if("UP".equals(name)) s="\u001b[A";
-        else if("DOWN".equals(name)) s="\u001b[B";
-        else if("LEFT".equals(name)) s="\u001b[D";
-        else if("RIGHT".equals(name)) s="\u001b[C";
-        else if("HOME".equals(name)) s="\u001b[H";
-        else if("END".equals(name)) s="\u001b[F";
-        else if("PGUP".equals(name)) s="\u001b[5~";
-        else if("PGDN".equals(name)) s="\u001b[6~";
-        if(s!=null) writeBytes(s);
+        if(session==null || !session.isRunning()) return; String s=null;
+        if("ESC".equals(name)) s="\u001b"; else if("TAB".equals(name)) s="\t"; else if("ENTER".equals(name)) s="\r"; else if("UP".equals(name)) s="\u001b[A"; else if("DOWN".equals(name)) s="\u001b[B"; else if("LEFT".equals(name)) s="\u001b[D"; else if("RIGHT".equals(name)) s="\u001b[C"; else if("HOME".equals(name)) s="\u001b[H"; else if("END".equals(name)) s="\u001b[F"; else if("PGUP".equals(name)) s="\u001b[5~"; else if("PGDN".equals(name)) s="\u001b[6~"; if(s!=null) writeBytes(s);
     }
-
     public void copySelection(){ terminalView.performLongClick(); }
-
-    public void pasteClipboard(){
-        android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-        if(cm!=null && cm.hasPrimaryClip() && session!=null && session.isRunning()){
-            CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(getContext());
-            if(text!=null) session.getEmulator().paste(text.toString());
-        }
-    }
-
+    public void pasteClipboard(){ android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE); if(cm!=null && cm.hasPrimaryClip() && session!=null && session.isRunning()){ CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(getContext()); if(text!=null) session.getEmulator().paste(text.toString()); } }
     public void clear(){ if(session!=null && session.isRunning()) writeBytes("\u000c"); }
-
     private final class ViewClient implements TerminalViewClient {
         public float onScale(float scale){ return scale; }
         public void onSingleTapUp(MotionEvent e){ terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard(); }
@@ -118,39 +76,17 @@ public final class MetmcTerminalPanel extends FrameLayout {
         public boolean readAltKey(){ return alt; }
         public boolean readShiftKey(){ return shift; }
         public boolean readFnKey(){ return fn; }
-        public boolean onCodePoint(int codePoint,boolean ctrlDown,TerminalSession s){
-            if(ctrlDown) s.writeCodePoint(true,codePoint); else s.writeCodePoint(alt,codePoint);
-            return true;
-        }
+        public boolean onCodePoint(int codePoint,boolean ctrlDown,TerminalSession s){ if(ctrlDown) s.writeCodePoint(true,codePoint); else s.writeCodePoint(alt,codePoint); return true; }
         public void onEmulatorSet(){}
-        public void logError(String t,String m){}
-        public void logWarn(String t,String m){}
-        public void logInfo(String t,String m){}
-        public void logDebug(String t,String m){}
-        public void logVerbose(String t,String m){}
-        public void logStackTraceWithMessage(String t,String m,Exception e){}
-        public void logStackTrace(String t,Exception e){}
+        public void logError(String t,String m){} public void logWarn(String t,String m){} public void logInfo(String t,String m){} public void logDebug(String t,String m){} public void logVerbose(String t,String m){}
+        public void logStackTraceWithMessage(String t,String m,Exception e){} public void logStackTrace(String t,Exception e){}
     }
-
     private final class SessionClient implements TerminalSessionClient {
         public void onTextChanged(TerminalSession s){ MetmcTerminalPanel.this.postInvalidate(); }
-        public void onTitleChanged(TerminalSession s){}
-        public void onSessionFinished(TerminalSession s){}
-        public void onCopyTextToClipboard(TerminalSession s,String text){
-            android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-            if(cm!=null) cm.setPrimaryClip(android.content.ClipData.newPlainText("METMC Terminal",text));
-        }
-        public void onPasteTextFromClipboard(TerminalSession s){ pasteClipboard(); }
-        public void onBell(TerminalSession s){}
-        public void onColorsChanged(TerminalSession s){}
-        public void onTerminalCursorStateChange(boolean state){}
-        public Integer getTerminalCursorStyle(){ return 0; }
-        public void logError(String t,String m){}
-        public void logWarn(String t,String m){}
-        public void logInfo(String t,String m){}
-        public void logDebug(String t,String m){}
-        public void logVerbose(String t,String m){}
-        public void logStackTraceWithMessage(String t,String m,Exception e){}
-        public void logStackTrace(String t,Exception e){}
+        public void onTitleChanged(TerminalSession s){} public void onSessionFinished(TerminalSession s){}
+        public void onCopyTextToClipboard(TerminalSession s,String text){ android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE); if(cm!=null) cm.setPrimaryClip(android.content.ClipData.newPlainText("METMC Terminal",text)); }
+        public void onPasteTextFromClipboard(TerminalSession s){ pasteClipboard(); } public void onBell(TerminalSession s){} public void onColorsChanged(TerminalSession s){} public void onTerminalCursorStateChange(boolean state){} public Integer getTerminalCursorStyle(){ return 0; }
+        public void logError(String t,String m){} public void logWarn(String t,String m){} public void logInfo(String t,String m){} public void logDebug(String t,String m){} public void logVerbose(String t,String m){}
+        public void logStackTraceWithMessage(String t,String m,Exception e){} public void logStackTrace(String t,Exception e){}
     }
 }
