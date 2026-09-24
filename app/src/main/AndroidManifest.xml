@@ -32,15 +32,6 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
 
-        <!-- ProfileInstaller is optional; disable only its delayed initializer. -->
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            android:exported="false"
-            tools:node="merge">
-            <meta-data android:name="androidx.profileinstaller.ProfileInstallerInitializer" tools:node="remove"/>
-        </provider>
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.metmc.os.next.fileprovider"
