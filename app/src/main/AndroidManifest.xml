@@ -32,22 +32,13 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
 
-        <!--
-            terminal-view brings in AndroidX ProfileInstaller. On this device/build
-            its Startup initializer can resolve ProfileInstaller but then fail on
-            AbstractResolvableFuture before the desktop is stable. Profile
-            installation is optional for this app, so disable only that initializer
-            while keeping the rest of AndroidX Startup available.
-        -->
+        <!-- ProfileInstaller is not required by METMC OS NEXT. Remove the
+             AndroidX Startup provider contributed by ProfileInstaller so its
+             background initializer can never execute at runtime. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
-            android:exported="false"
-            tools:node="merge">
-            <meta-data
-                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-                tools:node="remove"/>
-        </provider>
+            tools:node="remove"/>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -80,13 +71,11 @@
             android:resizeableActivity="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|keyboardHidden">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.APP_BROWSER"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
-
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
