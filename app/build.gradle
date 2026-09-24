@@ -2,6 +2,10 @@ plugins {
     id 'com.android.application'
 }
 
+configurations.configureEach {
+    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'
+}
+
 android {
     namespace 'com.metmc.os.next'
     compileSdk 36
