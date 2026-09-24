@@ -1,15 +1,12 @@
 name: One-time METMC source fix
 
-on:
-  push:
-    branches: [ main ]
+on: push
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: ${{ !startsWith(github.event.head_commit.message, 'Patch METMC source') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,10 +33,11 @@ jobs:
           p.write_text(s.replace(old, new, 1))
           PY
 
-      - name: Commit source fix
+      - name: Commit source fix and remove one-time workflow
         run: |
           git config user.name "TEMMC"
           git config user.email "mapfumotinotendaenock9@gmail.com"
           git add app/src/main/java/com/metmc/os/next/MainActivity.java
+          git rm .github/workflows/one-time-source-fix.yml
           git commit -m "Patch METMC source: restore launcher declaration"
           git push origin main
