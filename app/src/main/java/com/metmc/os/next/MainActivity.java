@@ -562,6 +562,7 @@ public class MainActivity extends Activity {
         boolean scrollingSurface=false;
         boolean scrollingWindow=false;
         String scrollingWindowTitle=null;
+        boolean draggingWindowScrollbar=false;
         long lastWindowTapTime=0;
         String lastWindowTapTitle=null;
         int accent=0xff39ff88;
@@ -1830,13 +1831,7 @@ public class MainActivity extends Activity {
                         float rr=hit.r,bb=hit.b;
                         // Remember which window can scroll, but do not mark it as scrolling until
                         // the finger actually moves. This keeps taps distinct from swipes.
-                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
-                            scrollingWindowTitle=hit.title;
-                        }
-                        if(("Applications".equals(hit.title) || "Files".equals(hit.title))
-                                && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){
-                            scrollingWindowTitle=hit.title;
-                        }
+                        if(y>hit.t+54 && y<hit.b-12){ scrollingWindowTitle=hit.title; if(!"Terminal".equals(hit.title) && windowScrollMax(hit.title,hit)>0 && x>=hit.r-24){ draggingWindowScrollbar=true; lastTouchY=y; return true; } }
                         if("Settings".equals(hit.title) && y>hit.t+52 && y<hit.b-10){
                             int setting=(int)((y-(hit.t+62)+windowScroll)/52f);
                             if(setting==0) showWindow("Wallpaper Manager");
@@ -2012,20 +2007,13 @@ public class MainActivity extends Activity {
             if(e.getAction()==MotionEvent.ACTION_MOVE){
                 float dy=lastTouchY-y;
                 if(Math.abs(x-downX)>6 || Math.abs(y-downY)>6) gestureMoved=true;
-                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){
-                    scrollingWindow=true;
-                }
+                if(surface==Surface.DESKTOP && draggingWindowScrollbar && scrollingWindowTitle!=null){ WindowState sws=windows.get(scrollingWindowTitle); if(sws!=null){ float max=windowScrollMax(scrollingWindowTitle,sws), top=sws.t+58, track=Math.max(1,sws.b-14-top), content=windowContentHeight(scrollingWindowTitle,sws), thumb=Math.max(28,track*(track/content)), usable=Math.max(1,track-thumb), next=(y-top-thumb/2f)/usable*max; if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,next)); else windowScroll=Math.max(0,Math.min(max,next)); lastTouchY=y; invalidate(); return true; } }
+                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){ scrollingWindow=true; pendingFilePath=null; pendingAppIndex=-1; draggingWindow=null; }
                 if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>6) scrollingSurface=true;
                 if(surface!=Surface.DESKTOP && scrollingSurface){
                     surfaceScroll+=dy; clampSurfaceScroll(); lastTouchY=y; invalidate(); return true;
                 }
-                if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){
-                    WindowState sws=windows.get(scrollingWindowTitle);
-                    if(sws!=null){
-                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); invalidate(); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }
-                        lastTouchY=y; invalidate(); return true;
-                    }
-                }
+                if(surface==Surface.DESKTOP&&scrollingWindow&&scrollingWindowTitle!=null){ WindowState sws=windows.get(scrollingWindowTitle); if(sws!=null){ float max=windowScrollMax(scrollingWindowTitle,sws); if(max>0){ if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,applicationsWindowScroll+dy)); else windowScroll=Math.max(0,Math.min(max,windowScroll+dy)); } lastTouchY=y; invalidate(); return true; } }
                 if(surface==Surface.DESKTOP&&draggingWindow!=null){
                     WindowState ws=windows.get(draggingWindow);
                     if(ws!=null&&!ws.maximized){
@@ -2065,8 +2053,8 @@ public class MainActivity extends Activity {
                     return true;
                 }
                 pendingFilePath=null; pendingAppIndex=-1;
-                if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; return true; }
-                if(scrollingWindow){ scrollingWindow=false; scrollingWindowTitle=null; return true; }
+                if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }
+                if(scrollingWindow||draggingWindowScrollbar){ scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }
                 if(draggingWindow!=null){
                     String moved=draggingWindow;
                     if(e.getAction()==MotionEvent.ACTION_UP && dragging){

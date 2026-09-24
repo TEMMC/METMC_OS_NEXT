@@ -33,61 +33,15 @@ public final class MetmcTerminalPanel extends FrameLayout {
     }
 
     public void start(){
-        if(session!=null && session.isRunning()) {
-            terminalView.requestFocusFromTouch();
-            terminalView.requestFocus();
-            showKeyboard();
-            return;
-        }
-        try {
-            // Do not assume /system/bin/su exists. Magisk 30.x commonly exposes
-            // its su binary from /data/adb/magisk/su or another Magisk tmpfs path.
-            // Resolve the real binary first, then cross the root boundary and
-            // enter the Debian rootfs. The shell visible to the user is Debian.
-            String script="SU=; " +
-                    "for C in /data/adb/magisk/su /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su /system/sbin/su; do " +
-                    "if [ -x \"$C\" ]; then SU=\"$C\"; break; fi; done; " +
-                    "if [ -z \"$SU\" ] && [ -x /system/bin/magisk ]; then MT=\"$(/system/bin/magisk --path 2>/dev/null)\"; [ -x \"$MT/su\" ] && SU=\"$MT/su\"; fi; " +
-                    "if [ -z \"$SU\" ] && command -v su >/dev/null 2>&1; then SU=\"$(command -v su)\"; fi; " +
-                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su is not available to this app. Grant root access to METMC OS NEXT in Magisk and reopen Terminal.'; exit 127; fi; " +
-                    "exec \"$SU\" -c '" +
-                    "R=/data/local/linux/rootfs; " +
-                    "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
-                    "mkdir -p \"$R/dev\" \"$R/dev/pts\" \"$R/proc\" \"$R/sys\" \"$R/tmp\" \"$R/run\"; " +
-                    "mountpoint -q \"$R/dev\" 2>/dev/null || mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
-                    "mountpoint -q \"$R/dev/pts\" 2>/dev/null || mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; " +
-                    "mountpoint -q \"$R/proc\" 2>/dev/null || mount -t proc proc \"$R/proc\" 2>/dev/null || true; " +
-                    "mountpoint -q \"$R/sys\" 2>/dev/null || mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; " +
-                    "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
-                    "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; " +
-                    "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
-                    "export SHELL=/bin/bash; " +
-                    "cd /root 2>/dev/null || cd /; " +
-                    "exec chroot \"$R\" /bin/bash --login'; " +
-                    "code=$?; echo '[METMC] Debian terminal exited with code '$code; exit $code";
-            String[] args={"-c",script};
-            String[] env={
-                    "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
-                    "LC_ALL=C.UTF-8","SHELL=/bin/bash",
-                    "PATH=/data/adb/magisk:/debug_ramdisk:/sbin:/system/bin:/system/xbin:/usr/bin:/bin"
-            };
-            session=new TerminalSession("/system/bin/sh",ROOTFS,args,env,5000,new SessionClient());
-            terminalView.attachSession(session);
-            terminalView.setFocusableInTouchMode(true);
-            terminalView.requestFocusFromTouch();
-            terminalView.requestFocus();
-            showKeyboard();
-        } catch(Exception ex) {
-            session=null;
-            android.util.Log.e("METMC","Terminal start failed",ex);
-            removeAllViews();
-            TextView fallback=new TextView(getContext());
-            fallback.setText("METMC Terminal\n\nUnable to start the Debian terminal.\n"+ex.getMessage());
-            fallback.setTextColor(Color.WHITE);
-            fallback.setTextSize(14);
-            fallback.setPadding(24,24,24,24);
-            addView(fallback,new LayoutParams(-1,-1));
-        }
+        if(session!=null && session.isRunning()){ terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard(); return; }
+        try{
+            String script="R=/data/local/linux/rootfs; test -x \"$R/bin/bash\" || { echo '[METMC] Debian rootfs /bin/bash is missing.'; exit 1; }; mkdir -p \"$R/dev\" \"$R/dev/pts\" \"$R/proc\" \"$R/sys\" \"$R/tmp\" \"$R/run\"; mountpoint -q \"$R/dev\" 2>/dev/null || mount --bind /dev \"$R/dev\" 2>/dev/null || true; mountpoint -q \"$R/dev/pts\" 2>/dev/null || mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; mountpoint -q \"$R/proc\" 2>/dev/null || mount -t proc proc \"$R/proc\" 2>/dev/null || true; mountpoint -q \"$R/sys\" 2>/dev/null || mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export HOME=/root TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 LC_ALL=C.UTF-8 SHELL=/bin/bash; cd /root 2>/dev/null || cd /; exec chroot \"$R\" /bin/bash --login";
+            String exe=null; String[] args;
+            if(new java.io.File("/system/bin/magisk").canExecute()){ exe="/system/bin/magisk"; args=new String[]{"su","-M","-c",script}; }
+            else{ String[] cs={"/debug_ramdisk/su","/sbin/su","/system/xbin/su","/system/bin/su","/system/product/bin/su"}; for(String c:cs) if(new java.io.File(c).canExecute()){exe=c;break;} if(exe==null) throw new IOException("Magisk root entry point is unavailable"); args=new String[]{"-M","-c",script}; }
+            String[] env={"TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8","LC_ALL=C.UTF-8","SHELL=/bin/bash","PATH=/data/adb/magisk:/debug_ramdisk:/sbin:/system/bin:/system/xbin:/system/product/bin:/usr/bin:/bin"};
+            session=new TerminalSession(exe,"/",args,env,5000,new SessionClient()); terminalView.attachSession(session); terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard();
+        }catch(Exception ex){ session=null; android.util.Log.e("METMC","Terminal start failed",ex); removeAllViews(); TextView v=new TextView(getContext()); v.setText("METMC Terminal\n\nUnable to start the Debian terminal.\n"+ex.getMessage()); v.setTextColor(Color.WHITE); v.setTextSize(14); v.setPadding(24,24,24,24); addView(v,new LayoutParams(-1,-1)); }
     }
 
     private void showKeyboard(){

@@ -44,6 +44,7 @@ android {
 // ProfileInstaller is optional for METMC OS NEXT. Exclude it completely so
 // its background initializer cannot crash the process on the target device.
 configurations.configureEach {
+    resolutionStrategy.force 'androidx.concurrent:concurrent-futures:1.3.0'
     exclude group: 'androidx.profileinstaller', module: 'profileinstaller'
 }
 

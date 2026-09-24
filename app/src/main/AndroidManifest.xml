@@ -32,13 +32,14 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
 
-        <!-- ProfileInstaller is not required by METMC OS NEXT. Remove the
-             AndroidX Startup provider contributed by ProfileInstaller so its
-             background initializer can never execute at runtime. -->
+        <!-- ProfileInstaller is optional; disable only its delayed initializer. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
-            tools:node="remove"/>
+            android:exported="false"
+            tools:node="merge">
+            <meta-data android:name="androidx.profileinstaller.ProfileInstallerInitializer" tools:node="remove"/>
+        </provider>
 
         <provider
             android:name="androidx.core.content.FileProvider"
