@@ -68,7 +68,7 @@ tasks.register('patchMainActivitySource') {
             if (!text.contains(oldBlock)) {
                 throw new GradleException('MainActivity getAndroidApps source pattern was not found')
             }
-            source.write(text.replace(oldBlock, newBlock, 1), 'UTF-8')
+            source.write(text.replace(oldBlock, newBlock), 'UTF-8')
         }
     }
 }
