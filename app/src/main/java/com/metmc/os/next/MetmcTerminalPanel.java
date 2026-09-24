@@ -40,36 +40,36 @@ public final class MetmcTerminalPanel extends FrameLayout {
             return;
         }
         try {
-            // The outer shell is Android, while the interactive shell after the
-            // privilege boundary is Debian. Do not use /system/bin/su as the
-            // only entry point: on Magisk 30.x the exposed su may be in the
-            // Magisk tmpfs (/debug_ramdisk or /sbin).
+            // Do not assume /system/bin/su exists. Magisk 30.x commonly exposes
+            // its su binary from /data/adb/magisk/su or another Magisk tmpfs path.
+            // Resolve the real binary first, then cross the root boundary and
+            // enter the Debian rootfs. The shell visible to the user is Debian.
             String script="SU=; " +
-                    "for C in /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su /system/sbin/su; do " +
+                    "for C in /data/adb/magisk/su /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su /system/sbin/su; do " +
                     "if [ -x \"$C\" ]; then SU=\"$C\"; break; fi; done; " +
                     "if [ -z \"$SU\" ] && [ -x /system/bin/magisk ]; then MT=\"$(/system/bin/magisk --path 2>/dev/null)\"; [ -x \"$MT/su\" ] && SU=\"$MT/su\"; fi; " +
                     "if [ -z \"$SU\" ] && command -v su >/dev/null 2>&1; then SU=\"$(command -v su)\"; fi; " +
-                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su is not exposed to METMC OS NEXT. Grant root access to METMC OS NEXT in Magisk, then reopen Terminal.'; exit 1; fi; " +
+                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su is not available to this app. Grant root access to METMC OS NEXT in Magisk and reopen Terminal.'; exit 127; fi; " +
                     "exec \"$SU\" -c '" +
                     "R=/data/local/linux/rootfs; " +
                     "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
-                    "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
-                    "mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; " +
-                    "mount -t proc proc \"$R/proc\" 2>/dev/null || true; " +
-                    "mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; " +
-                    "mkdir -p \"$R/tmp\" \"$R/run\"; " +
+                    "mkdir -p \"$R/dev\" \"$R/dev/pts\" \"$R/proc\" \"$R/sys\" \"$R/tmp\" \"$R/run\"; " +
+                    "mountpoint -q \"$R/dev\" 2>/dev/null || mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
+                    "mountpoint -q \"$R/dev/pts\" 2>/dev/null || mount --bind /dev/pts \"$R/dev/pts\" 2>/dev/null || true; " +
+                    "mountpoint -q \"$R/proc\" 2>/dev/null || mount -t proc proc \"$R/proc\" 2>/dev/null || true; " +
+                    "mountpoint -q \"$R/sys\" 2>/dev/null || mount -t sysfs sys \"$R/sys\" 2>/dev/null || true; " +
                     "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
                     "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; " +
                     "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
-                    "cd /root 2>/dev/null || true; " +
-                    "exec chroot \"$R\" /bin/bash --login';" +
-                    " code=$?; echo '[METMC] Debian terminal exited with code '$code; exit $code";
+                    "export SHELL=/bin/bash; " +
+                    "cd /root 2>/dev/null || cd /; " +
+                    "exec chroot \"$R\" /bin/bash --login'; " +
+                    "code=$?; echo '[METMC] Debian terminal exited with code '$code; exit $code";
             String[] args={"-c",script};
             String[] env={
                     "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
                     "LC_ALL=C.UTF-8","SHELL=/bin/bash",
-                    // Android-side PATH: needed only to locate Magisk su before chroot.
-                    "PATH=/debug_ramdisk:/sbin:/system/bin:/system/xbin:/data/adb/magisk:/usr/bin:/bin"
+                    "PATH=/data/adb/magisk:/debug_ramdisk:/sbin:/system/bin:/system/xbin:/usr/bin:/bin"
             };
             session=new TerminalSession("/system/bin/sh",ROOTFS,args,env,5000,new SessionClient());
             terminalView.attachSession(session);
