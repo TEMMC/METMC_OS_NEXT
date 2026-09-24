@@ -15,6 +15,132 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Apply METMC terminal and scrolling patch to source
+        if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[METMC PATCH]') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          # Debian terminal: invoke Magisk directly when /system/bin/su is absent.
+          p=Path('app/src/main/java/com/metmc/os/next/MetmcTerminalPanel.java')
+          s=p.read_text()
+          start=s.index('    public void start(){')
+          end=s.index('\n    private void showKeyboard()', start)
+          new='''    public void start(){
+          if(session!=null && session.isRunning()) {
+              terminalView.requestFocusFromTouch();
+              terminalView.requestFocus();
+              showKeyboard();
+              return;
+          }
+          try {
+              String script = "R=/data/local/linux/rootfs; " +
+                      "test -x \\\"$R/bin/bash\\\" || { echo '[METMC] Debian rootfs /bin/bash is missing.'; exit 1; }; " +
+                      "mkdir -p \\\"$R/dev\\\" \\\"$R/dev/pts\\\" \\\"$R/proc\\\" \\\"$R/sys\\\" \\\"$R/tmp\\\" \\\"$R/run\\\"; " +
+                      "mountpoint -q \\\"$R/dev\\\" 2>/dev/null || mount --bind /dev \\\"$R/dev\\\" 2>/dev/null || true; " +
+                      "mountpoint -q \\\"$R/dev/pts\\\" 2>/dev/null || mount --bind /dev/pts \\\"$R/dev/pts\\\" 2>/dev/null || true; " +
+                      "mountpoint -q \\\"$R/proc\\\" 2>/dev/null || mount -t proc proc \\\"$R/proc\\\" 2>/dev/null || true; " +
+                      "mountpoint -q \\\"$R/sys\\\" 2>/dev/null || mount -t sysfs sys \\\"$R/sys\\\" 2>/dev/null || true; " +
+                      "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; " +
+                      "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; " +
+                      "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; export SHELL=/bin/bash; " +
+                      "cd /root 2>/dev/null || cd /; " +
+                      "exec chroot \\\"$R\\\" /bin/bash --login";
+              String executable;
+              String[] args;
+              if(new java.io.File("/system/bin/magisk").canExecute()) {
+                  executable = "/system/bin/magisk";
+                  args = new String[]{"su", "-M", "-c", script};
+              } else {
+                  String[] candidates={"/debug_ramdisk/su","/sbin/su","/system/xbin/su","/system/bin/su","/system/product/bin/su"};
+                  executable=null;
+                  for(String c:candidates) if(new java.io.File(c).canExecute()){ executable=c; break; }
+                  if(executable==null) throw new IOException("Magisk root entry point is unavailable. /system/bin/magisk and known su paths are not executable.");
+                  args = new String[]{"-M", "-c", script};
+              }
+              String[] env={
+                      "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
+                      "LC_ALL=C.UTF-8","SHELL=/bin/bash",
+                      "PATH=/data/adb/magisk:/debug_ramdisk:/sbin:/system/bin:/system/xbin:/system/product/bin:/usr/bin:/bin"
+              };
+              session=new TerminalSession(executable,"/",args,env,5000,new SessionClient());
+              terminalView.attachSession(session);
+              terminalView.setFocusableInTouchMode(true);
+              terminalView.requestFocusFromTouch();
+              terminalView.requestFocus();
+              showKeyboard();
+          } catch(Exception ex) {
+              session=null;
+              android.util.Log.e("METMC","Terminal start failed",ex);
+              removeAllViews();
+              TextView fallback=new TextView(getContext());
+              fallback.setText("METMC Terminal\\n\\nUnable to start the Debian terminal.\\n"+ex.getMessage());
+              fallback.setTextColor(Color.WHITE);
+              fallback.setTextSize(14);
+              fallback.setPadding(24,24,24,24);
+              addView(fallback,new LayoutParams(-1,-1));
+          }
+      }
+'''
+          p.write_text(s[:start]+new+s[end:])
+
+          # Applications/Files: make swipe scrolling independent of item taps and add direct scrollbar dragging.
+          p=Path('app/src/main/java/com/metmc/os/next/MainActivity.java')
+          s=p.read_text()
+          old='''        boolean scrollingSurface=false;\n        boolean scrollingWindow=false;\n        String scrollingWindowTitle=null;\n        long lastWindowTapTime=0;'''
+          new='''        boolean scrollingSurface=false;\n        boolean scrollingWindow=false;\n        String scrollingWindowTitle=null;\n        boolean draggingWindowScrollbar=false;\n        long lastWindowTapTime=0;'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''                        if(y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){\n                            scrollingWindowTitle=hit.title;\n                        }\n                        if(("Applications".equals(hit.title) || "Files".equals(hit.title))\n                                && y>hit.t+54 && y<hit.b-12 && windowScrollMax(hit.title,hit)>0){\n                            scrollingWindowTitle=hit.title;\n                        }'''
+          new='''                        if(y>hit.t+54 && y<hit.b-12){\n                            scrollingWindowTitle=hit.title;\n                            if(!"Terminal".equals(hit.title) && windowScrollMax(hit.title,hit)>0 && x>=hit.r-24){\n                                draggingWindowScrollbar=true;\n                                lastTouchY=y;\n                                return true;\n                            }\n                        }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){\n                    scrollingWindow=true;\n                }\n                if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>6) scrollingSurface=true;'''
+          new='''                if(surface==Surface.DESKTOP && draggingWindowScrollbar && scrollingWindowTitle!=null){\n                    WindowState sws=windows.get(scrollingWindowTitle);\n                    if(sws!=null){\n                        float max=windowScrollMax(scrollingWindowTitle,sws);\n                        float trackTop=sws.t+58, trackBottom=sws.b-14, trackH=Math.max(1,trackBottom-trackTop);\n                        float content=windowContentHeight(scrollingWindowTitle,sws);\n                        float thumbH=Math.max(28,trackH*(trackH/content));\n                        float usable=Math.max(1,trackH-thumbH);\n                        float next=(y-trackTop-thumbH/2f)/usable*max;\n                        if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,next));\n                        else windowScroll=Math.max(0,Math.min(max,next));\n                        lastTouchY=y; invalidate(); return true;\n                    }\n                }\n                if(surface==Surface.DESKTOP && !scrollingWindow && scrollingWindowTitle!=null && Math.abs(y-downY)>6){\n                    scrollingWindow=true;\n                    pendingFilePath=null;\n                    pendingAppIndex=-1;\n                    draggingWindow=null;\n                }\n                if(surface!=Surface.DESKTOP && !scrollingSurface && Math.abs(y-downY)>6) scrollingSurface=true;'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''                if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){\n                    WindowState sws=windows.get(scrollingWindowTitle);\n                    if(sws!=null){\n                        if("Applications".equals(scrollingWindowTitle)) { applicationsWindowScroll+=dy; applicationsWindowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),applicationsWindowScroll)); invalidate(); } else { windowScroll+=dy; windowScroll=Math.max(0,Math.min(windowScrollMax(scrollingWindowTitle,sws),windowScroll)); }\n                        lastTouchY=y; invalidate(); return true;\n                    }\n                }'''
+          new='''                if(surface==Surface.DESKTOP&&scrollingWindow && scrollingWindowTitle!=null){\n                    WindowState sws=windows.get(scrollingWindowTitle);\n                    if(sws!=null){\n                        float max=windowScrollMax(scrollingWindowTitle,sws);\n                        if(max>0){\n                            if("Applications".equals(scrollingWindowTitle)) applicationsWindowScroll=Math.max(0,Math.min(max,applicationsWindowScroll+dy));\n                            else windowScroll=Math.max(0,Math.min(max,windowScroll+dy));\n                        }\n                        lastTouchY=y; invalidate(); return true;\n                    }\n                }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old='''                if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; return true; }\n                if(scrollingWindow){ scrollingWindow=false; scrollingWindowTitle=null; return true; }'''
+          new='''                if(scrollingSurface){ scrollingSurface=false; scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }\n                if(scrollingWindow || draggingWindowScrollbar){ scrollingWindow=false; scrollingWindowTitle=null; draggingWindowScrollbar=false; return true; }'''
+          assert old in s
+          s=s.replace(old,new,1)
+
+          p.write_text(s)
+
+          # Keep the official ProfileInstaller fix and also force the matching concurrent-futures runtime.
+          p=Path('app/build.gradle')
+          s=p.read_text()
+          old="""configurations.configureEach {\n    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'\n}"""
+          new="""configurations.configureEach {\n    resolutionStrategy.force 'androidx.concurrent:concurrent-futures:1.3.0'\n    exclude group: 'androidx.profileinstaller', module: 'profileinstaller'\n}"""
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+
+          # Use AndroidX's documented precise initializer removal instead of removing the whole Startup provider.
+          p=Path('app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          old='''        <!-- ProfileInstaller is not required by METMC OS NEXT. Remove the\n             AndroidX Startup provider contributed by ProfileInstaller so its\n             background initializer can never execute at runtime. -->\n        <provider\n            android:name="androidx.startup.InitializationProvider"\n            android:authorities="${applicationId}.androidx-startup"\n            tools:node="remove"/>'''
+          new='''        <!-- ProfileInstaller is optional for METMC OS NEXT. Disable only its\n             delayed initializer while preserving other AndroidX Startup initializers. -->\n        <provider\n            android:name="androidx.startup.InitializationProvider"\n            android:authorities="${applicationId}.androidx-startup"\n            android:exported="false"\n            tools:node="merge">\n            <meta-data\n                android:name="androidx.profileinstaller.ProfileInstallerInitializer"\n                tools:node="remove"/>\n        </provider>'''
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/metmc/os/next/MainActivity.java app/src/main/java/com/metmc/os/next/MetmcTerminalPanel.java app/build.gradle app/src/main/AndroidManifest.xml
+          git commit -m '[METMC PATCH] Fix Debian terminal root and XFCE-style scrolling'
+          git push origin HEAD:main
+          echo 'Source patch committed. The next push will run the normal build against the patched source.'
+          exit 0
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
