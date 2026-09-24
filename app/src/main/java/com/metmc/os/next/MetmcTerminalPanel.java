@@ -29,13 +29,27 @@ public final class MetmcTerminalPanel extends FrameLayout {
         terminalView.setTerminalViewClient(new ViewClient());
         addView(terminalView,new LayoutParams(-1,-1));
         setFocusable(true);
+        setFocusableInTouchMode(true);
     }
 
     public void start(){
-        if(session!=null && session.isRunning()) return;
+        if(session!=null && session.isRunning()) {
+            terminalView.requestFocusFromTouch();
+            terminalView.requestFocus();
+            showKeyboard();
+            return;
+        }
         try {
-            String script="for SU in /debug_ramdisk/su /sbin/su /debug_ramdisk/magisk /sbin/magisk /data/adb/magisk/su /system/bin/su /system/xbin/su; do " +
-                    "if [ -x \"$SU\" ]; then exec \"$SU\" -c '" +
+            // The outer shell is Android, while the interactive shell after the
+            // privilege boundary is Debian. Do not use /system/bin/su as the
+            // only entry point: on Magisk 30.x the exposed su may be in the
+            // Magisk tmpfs (/debug_ramdisk or /sbin).
+            String script="SU=; " +
+                    "for C in /debug_ramdisk/su /sbin/su /system/bin/su /system/xbin/su; do " +
+                    "if [ -x \"$C\" ]; then SU=\"$C\"; break; fi; done; " +
+                    "if [ -z \"$SU\" ] && command -v su >/dev/null 2>&1; then SU=\"$(command -v su)\"; fi; " +
+                    "if [ -z \"$SU\" ]; then echo '[METMC] Magisk su was not exposed to this process.'; exit 1; fi; " +
+                    "exec \"$SU\" -c '" +
                     "R=/data/local/linux/rootfs; " +
                     "test -x \"$R/bin/bash\" || { echo \"[METMC] Debian rootfs /bin/bash is missing.\"; exit 1; }; " +
                     "mount --bind /dev \"$R/dev\" 2>/dev/null || true; " +
@@ -47,36 +61,43 @@ public final class MetmcTerminalPanel extends FrameLayout {
                     "export HOME=/root; export TERM=xterm-256color; export COLORTERM=truecolor; " +
                     "export LANG=C.UTF-8; export LC_ALL=C.UTF-8; " +
                     "cd /root 2>/dev/null || true; " +
-                    "exec chroot \"$R\" /bin/bash --login' ; fi; " +
-                    "done; echo '[METMC] MagiskSU is not visible to this app. Grant METMC OS NEXT root access in Magisk, then reopen Terminal.'; exit 1";
-            String[] args={"sh","-c",script};
+                    "exec chroot \"$R\" /bin/bash --login';" +
+                    " code=$?; echo '[METMC] Debian terminal exited with code '$code; exit $code";
+            String[] args={"-c",script};
             String[] env={
                     "TERM=xterm-256color","COLORTERM=truecolor","HOME=/root","LANG=C.UTF-8",
-                    "LC_ALL=C.UTF-8","PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                    "SHELL=/bin/bash"
+                    "LC_ALL=C.UTF-8","SHELL=/bin/bash",
+                    // Android-side PATH: needed only to locate Magisk su before chroot.
+                    "PATH=/debug_ramdisk:/sbin:/system/bin:/system/xbin:/data/adb/magisk:/usr/bin:/bin"
             };
             session=new TerminalSession("/system/bin/sh",ROOTFS,args,env,5000,new SessionClient());
             terminalView.attachSession(session);
             terminalView.setFocusableInTouchMode(true);
             terminalView.requestFocusFromTouch();
             terminalView.requestFocus();
-            postDelayed(()->{
-                try {
-                    InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                    if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
-                } catch(Exception ignored) {}
-            },300);
+            showKeyboard();
         } catch(Exception ex) {
             session=null;
             android.util.Log.e("METMC","Terminal start failed",ex);
             removeAllViews();
             TextView fallback=new TextView(getContext());
-            fallback.setText("METMC Terminal\n\nUnable to start the Debian terminal.\nThe desktop remains running.");
+            fallback.setText("METMC Terminal\n\nUnable to start the Debian terminal.\n"+ex.getMessage());
             fallback.setTextColor(Color.WHITE);
             fallback.setTextSize(14);
             fallback.setPadding(24,24,24,24);
             addView(fallback,new LayoutParams(-1,-1));
         }
+    }
+
+    private void showKeyboard(){
+        postDelayed(()->{
+            try {
+                terminalView.requestFocusFromTouch();
+                terminalView.requestFocus();
+                InputMethodManager imm=(InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT);
+            } catch(Exception ignored) {}
+        },250);
     }
 
     public void stop(){
@@ -115,34 +136,27 @@ public final class MetmcTerminalPanel extends FrameLayout {
         if(s!=null) writeBytes(s);
     }
 
-    public void copySelection(){
-        terminalView.performLongClick();
-    }
+    public void copySelection(){ terminalView.performLongClick(); }
 
     public void pasteClipboard(){
         android.content.ClipboardManager cm=(android.content.ClipboardManager)getContext().getSystemService(Context.CLIPBOARD_SERVICE);
         if(cm!=null && cm.hasPrimaryClip() && session!=null && session.isRunning()){
-            CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(MetmcTerminalPanel.this.getContext());
+            CharSequence text=cm.getPrimaryClip().getItemAt(0).coerceToText(getContext());
             if(text!=null) session.getEmulator().paste(text.toString());
         }
     }
 
-    public void clear(){
-        if(session!=null && session.isRunning()) writeBytes("\u000c");
-    }
+    public void clear(){ if(session!=null && session.isRunning()) writeBytes("\u000c"); }
 
     private final class ViewClient implements TerminalViewClient {
         public float onScale(float scale){ return scale; }
-        public void onSingleTapUp(MotionEvent e){ terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); try { InputMethodManager imm=(InputMethodManager)MetmcTerminalPanel.this.getContext().getSystemService(Context.INPUT_METHOD_SERVICE); if(imm!=null) imm.showSoftInput(terminalView,InputMethodManager.SHOW_IMPLICIT); } catch(Exception ignored) {} }
+        public void onSingleTapUp(MotionEvent e){ terminalView.setFocusableInTouchMode(true); terminalView.requestFocusFromTouch(); terminalView.requestFocus(); showKeyboard(); }
         public boolean shouldBackButtonBeMappedToEscape(){ return false; }
         public boolean shouldEnforceCharBasedInput(){ return true; }
         public boolean shouldUseCtrlSpaceWorkaround(){ return false; }
         public boolean isTerminalViewSelected(){ return terminalView.hasFocus(); }
         public void copyModeChanged(boolean copyMode){}
-        public boolean onKeyDown(int keyCode,KeyEvent e,TerminalSession s){
-            if(keyCode==KeyEvent.KEYCODE_BACK) return false;
-            return false;
-        }
+        public boolean onKeyDown(int keyCode,KeyEvent e,TerminalSession s){ return false; }
         public boolean onKeyUp(int keyCode,KeyEvent e){ return false; }
         public boolean onLongPress(MotionEvent e){ return false; }
         public boolean readControlKey(){ return ctrl; }
